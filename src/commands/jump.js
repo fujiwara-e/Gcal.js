@@ -1,5 +1,5 @@
 import { convertToDateTime } from '../utils/dateUtils.js';
-import { updateEventsAndUI } from '../ui/layout.js';
+import { updateEventsAndUI } from '../ui/tableUpdater.js';
 
 export function jumpCommand(screen, events, allEvents, args) {
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');

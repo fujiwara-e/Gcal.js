@@ -2,7 +2,8 @@ import { jumpCommand } from '../commands/jump.js';
 import { addEvent } from '../commands/add.js';
 import { addEventNL } from '../commands/addNL.js';
 import { editEvent } from '../commands/edit.js';
-import { toggleFullscreen, toggleLastYearView, toggleCurrentDescView } from './layout.js';
+import { toggleFullscreen } from './fullscreenManager.js';
+import { toggleLastYearView, toggleCurrentDescView } from './viewMode.js';
 
 export function setupVimKeysForNavigation(widget, screen, focusbackwith) {
     screen.key(['j', 'k', 'h', 'l'], (ch, key) => {

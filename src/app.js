@@ -1,7 +1,8 @@
 import '../src/utils/datePrototype.js';
 import { createLayout, removeCommandPopup } from './ui/layout.js';
 import { handleInput } from './ui/inputHandler.js';
-import { authorize, initializeCalendars, initializeEvents } from './services/calendarService.js';
+import { authorize } from './services/authService.js';
+import { initializeCalendars, initializeEvents } from './services/calendarService.js';
 import { editEvent, copyEventToDate } from './commands/edit.js';
 import { hasUpdates, isForkedRepository } from './commands/update.js';
 import { loadSetting } from './services/settingService.js';

@@ -1,11 +1,13 @@
 import {
   createDisplayItemsForEvents,
-  formatDisplayItems,
   searchDisplayItemIndex,
+} from '../ui/displayItems.js';
+import { formatDisplayItems } from '../ui/displayFormatter.js';
+import {
   setLastYearSortOrder,
-  applyLastYearSort,
   isRecentDescViewActive,
-} from '../ui/layout.js';
+} from '../ui/fullscreenManager.js';
+import { applyLastYearSort } from '../ui/viewMode.js';
 import { isSameDate } from '../utils/dateUtils.js';
 
 /**

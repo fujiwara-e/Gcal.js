@@ -1,0 +1,5 @@
+const calendarIds = [
+  'your-calendar-id@group.calendar.google.com',
+];
+
+export default calendarIds;

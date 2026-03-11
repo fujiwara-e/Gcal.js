@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { updateTable } from '../ui/layout.js';
+import { updateTable } from '../ui/tableUpdater.js';
 import { convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
 import { GeminiNLPService } from '../services/geminiService.js';

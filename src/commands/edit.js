@@ -1,230 +1,22 @@
 import { google } from 'googleapis';
-import { updateTable, groupEventsByDate, formatGroupedEventsDescending } from '../ui/layout.js';
-import { splitDateTimeIntoDateAndTime, convertToDateTime } from '../utils/dateUtils.js';
+import { updateTable } from '../ui/tableUpdater.js';
+import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayFormatter.js';
 import { createAddForm } from '../ui/form.js';
 import { updateEventDetailTable } from '../ui/table.js';
-import { openExternalEditor } from '../utils/editor.js';
 import path from 'path';
 import os from 'os';
-
-const ENTER_HANDLER_KEY = Symbol('formBoxEnterHandler');
-const SAVE_HANDLER_KEY = Symbol('formBoxSaveHandler');
-const ESCAPE_HANDLER_KEY = Symbol('formBoxEscapeHandler');
-
-function buildEditorContent(values, { includeAllDay = false } = {}) {
-  const {
-    title = '',
-    date = '',
-    startTime = '',
-    endTime = '',
-    description = '',
-    allDay = false,
-  } = values;
-
-  const lines = [
-    `Event Title | ${title}`,
-    `Date (YYYY-MM-DD) | ${date}`,
-    `Start Time (HH:mm) | ${startTime}`,
-    `End Time (HH:mm) | ${endTime}`,
-  ];
-
-  if (includeAllDay) {
-    lines.push(`All Day (y/n) | ${allDay ? 'y' : 'n'}`);
-  }
-
-  lines.push(`Description | ${description}`);
-
-  return `${lines.join('\n')}\n`;
-}
-
-function parseEditorContent(text, { includeAllDay = false } = {}) {
-  const details = {};
-
-  text.split('\n').forEach(line => {
-    const parts = line.split('|').map(part => part.trim());
-    if (parts.length === 2) {
-      const [label, value] = parts;
-      details[label] = value;
-    }
-  });
-
-  const parsed = {
-    title: details['Event Title'] || '',
-    date: details['Date (YYYY-MM-DD)'] || '',
-    startTime: details['Start Time (HH:mm)'] || '',
-    endTime: details['End Time (HH:mm)'] || '',
-    description: details['Description'] || '',
-  };
-
-  if (includeAllDay) {
-    parsed.allDay = (details['All Day (y/n)'] || 'n').toLowerCase() === 'y';
-  }
-
-  return parsed;
-}
-
-function applyDetailsToForm(formFields, details, { includeAllDay = false } = {}) {
-  formFields.title.setValue(details.title || '');
-  formFields.date.setValue(details.date || '');
-  formFields.startTime.setValue(details.startTime || '');
-  formFields.endTime.setValue(details.endTime || '');
-  formFields.description.setValue(details.description || '');
-
-  if (includeAllDay && formFields.all_day) {
-    if (details.allDay) {
-      formFields.all_day.check();
-    } else {
-      formFields.all_day.uncheck();
-    }
-  }
-}
-
-function collectFormValues(formFields, { includeAllDay = false } = {}) {
-  const values = {
-    title: formFields.title.getValue().trim(),
-    date: formFields.date.getValue().trim(),
-    startTime: formFields.startTime.getValue().trim(),
-    endTime: formFields.endTime.getValue().trim(),
-    description: formFields.description.getValue().trim(),
-  };
-
-  if (includeAllDay) {
-    values.allDay = !!formFields.all_day?.checked;
-  } else {
-    values.allDay = false;
-  }
-
-  return values;
-}
-
-function isAllDayEvent(event) {
-  return Boolean(event?.start?.date && !event?.start?.dateTime);
-}
-
-function formatDate(dateLike) {
-  if (!dateLike) {
-    return null;
-  }
-
-  const dateObj = new Date(dateLike);
-  if (Number.isNaN(dateObj.getTime())) {
-    return null;
-  }
-
-  return splitDateTimeIntoDateAndTime(dateObj);
-}
-
-function eventToFormValues(event, fallbackDate = null) {
-  const startInfo = formatDate(event?.start) || formatDate(fallbackDate);
-  const endInfo = formatDate(event?.end) || startInfo;
-
-  return {
-    title: event?.summary || '',
-    date: startInfo?.date || '',
-    startTime: event ? startInfo?.time || '' : '',
-    endTime: event ? endInfo?.time || '' : '',
-    description: event?.description || '',
-    allDay: event ? isAllDayEvent(event) : false,
-  };
-}
-
-function buildCalendarEventResource(values) {
-  const { title, description, date, startTime, endTime, allDay } = values;
-
-  if (allDay) {
-    return {
-      summary: title,
-      description,
-      start: { date },
-      end: { date },
-    };
-  }
-
-  return {
-    summary: title,
-    description,
-    start: {
-      dateTime: convertToDateTime(date, startTime).toISOString(),
-    },
-    end: {
-      dateTime: convertToDateTime(date, endTime).toISOString(),
-    },
-  };
-}
-
-function validateFormValues(values) {
-  return values.title && values.date && values.startTime && values.endTime;
-}
-
-function assignKeyHandler(element, keys, handler, storageKey) {
-  const existingHandler = element[storageKey];
-
-  if (existingHandler) {
-    if (typeof element.unkey === 'function') {
-      element.unkey(keys, existingHandler);
-    } else {
-      element.removeListener?.('keypress', existingHandler);
-    }
-  }
-
-  if (typeof element.key === 'function') {
-    element.key(keys, handler);
-  }
-
-  element[storageKey] = handler;
-}
-
-async function openEditorAndParse(screen, tempFilePath, values, options) {
-  const content = buildEditorContent(values, options);
-  const updatedText = await openExternalEditor(screen, tempFilePath, content);
-
-  if (!updatedText) {
-    return null;
-  }
-
-  return parseEditorContent(updatedText, options);
-}
-
-function setupEditorShortcut({ formBox, formFields, screen, tempFilePath, options }) {
-  const handler = async () => {
-    const currentValues = collectFormValues(formFields, options);
-    const updatedValues = await openEditorAndParse(screen, tempFilePath, currentValues, options);
-
-    if (updatedValues) {
-      applyDetailsToForm(formFields, updatedValues, options);
-      screen.render();
-    }
-  };
-
-  assignKeyHandler(formBox, ['enter'], handler, ENTER_HANDLER_KEY);
-}
-
-function setupSaveShortcut({ formBox, formFields, handler, options }) {
-  const wrappedHandler = async () => {
-    const values = collectFormValues(formFields, options);
-
-    try {
-      await handler(values);
-    } catch (err) {
-      console.error('Unexpected error while saving event:', err);
-    }
-  };
-
-  assignKeyHandler(formBox, ['C-s'], wrappedHandler, SAVE_HANDLER_KEY);
-}
-
-function setupEscapeShortcut({ formBox, leftTable, logTable, screen }) {
-  const handler = () => {
-    if (!formBox.destroyed) {
-      formBox.hide();
-    }
-    leftTable.focus();
-    screen.render();
-    logTable.log('Edit event cancelled.');
-  };
-
-  assignKeyHandler(formBox, ['escape'], handler, ESCAPE_HANDLER_KEY);
-}
+import {
+  applyDetailsToForm,
+  collectFormValues,
+  formatEventDate,
+  eventToFormValues,
+  buildCalendarEventResource,
+  validateFormValues,
+  openEditorAndParse,
+  setupEditorShortcut,
+  setupSaveShortcut,
+  setupEscapeShortcut,
+} from '../utils/eventFormUtils.js';
 
 export function editEvent(
   auth,
@@ -248,7 +40,7 @@ export function editEvent(
   const selectedCalendarId = selectedEvent?.calendarId ?? null;
   const selectedEventsId = selectedEvent?.id ?? null;
   const fallbackDate = selectedEvent?.start || selectedDate || new Date();
-  const fallbackDateInfo = formatDate(fallbackDate);
+  const fallbackDateInfo = formatEventDate(fallbackDate);
   const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
   const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
 
@@ -461,7 +253,7 @@ export function editEvent(
         promptCalendarSelection(async (selectedEditCalendar, selectedEditCalendarId) => {
           const initialValues = eventToFormValues(selectedEvent, fallbackDate);
           if (copyTargetDate) {
-            const targetDateInfo = formatDate(copyTargetDate);
+            const targetDateInfo = formatEventDate(copyTargetDate);
             if (targetDateInfo?.date) {
               initialValues.date = targetDateInfo.date;
             }
@@ -666,7 +458,7 @@ export async function copyEventToDate(
   };
 
   const baseValues = eventToFormValues(sourceEvent);
-  const targetDateInfo = formatDate(targetDate);
+  const targetDateInfo = formatEventDate(targetDate);
   const initialValues = {
     ...baseValues,
     date: targetDateInfo?.date || baseValues.date,

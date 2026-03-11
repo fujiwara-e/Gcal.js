@@ -1,7 +1,7 @@
 import blessed from 'blessed';
 import { configCalendarListInDatabase, fetchCalendarsFromDatabase, insertCalendarListToDatabase } from '../services/databaseService.js';
 import { fetchCalendars } from '../services/calendarService.js';
-import { updateTable } from '../ui/layout.js';
+import { updateTable } from '../ui/tableUpdater.js';
 
 export async function configCommand(auth, screen, calendars, events, allEvents) {
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
