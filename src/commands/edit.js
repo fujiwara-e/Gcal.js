@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
-import { updateTable, groupEventsByDate, formatGroupedEventsDescending } from '../ui/layout.js';
+import { updateTable } from '../ui/tableUpdater.js';
+import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayFormatter.js';
 import { splitDateTimeIntoDateAndTime, convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
 import { updateEventDetailTable } from '../ui/table.js';

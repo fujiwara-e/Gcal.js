@@ -1,4 +1,4 @@
-import { updateTable } from '../ui/layout.js';
+import { updateTable } from '../ui/tableUpdater.js';
 import { mergeDuplicateEvents } from '../services/databaseService.js';
 
 export function syncCommand(auth, screen, calendars, events, allEvents, keypressListener) {
