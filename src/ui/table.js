@@ -42,7 +42,7 @@ export function createRightTable(screen) {
     }
   });
   screen.append(rightTable);
-  setupVimKeysForNavigation(rightTable.rows, screen, null);
+  setupVimKeysForNavigation(rightTable.rows, screen, null, null);
   return rightTable;
 }
 

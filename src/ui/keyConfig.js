@@ -5,7 +5,7 @@ import { editEvent } from '../commands/edit.js';
 import { toggleFullscreen } from './fullscreenManager.js';
 import { toggleLastYearView, toggleCurrentDescView } from './viewMode.js';
 
-export function setupVimKeysForNavigation(widget, screen, focusbackwith) {
+export function setupVimKeysForNavigation(widget, screen, focusleft, focusright) {
     screen.key(['j', 'k', 'h', 'l'], (ch, key) => {
         if (screen.focused === widget) {
             if (ch === 'j') {
@@ -20,9 +20,13 @@ export function setupVimKeysForNavigation(widget, screen, focusbackwith) {
                 } else if (widget.up) {
                     widget.up();
                 }
-            } else if (ch === 'h' || ch === 'l') {
-                if (focusbackwith && focusbackwith.visible) {
-                    focusbackwith.focus();
+            } else if (ch === 'h') {
+                if (focusleft && focusleft.visible) {
+                    focusleft.focus();
+                }
+            } else if (ch === 'l') {
+                if (focusright && focusright.visible) {
+                    focusright.focus();
                 }
             }
 
@@ -97,7 +101,7 @@ export function getDefaultKeyBindings() {
     return {
         quit: ['q', 'C-c'],
         addEvent: ['a'],
-        addEventNL: ['l'],
+        addEventNL: ['N'],
         nextWeek: ['n'],
         prevWeek: ['p'],
         nextMonth: ['C-n'],

@@ -327,12 +327,12 @@ export function createLayout(calendars, events) {
   screen.append(commandList);
   screen.append(commandDetailsBox);
   screen.append(eventDetailTable);
-  setupVimKeysForNavigation(leftTable, screen, null);
-  setupVimKeysForNavigation(list, screen, null);
-  setupVimKeysForNavigation(commandList, screen, null);
-  setupVimKeysForNavigation(editCalendarCommandList, screen, null);
-  setupVimKeysForNavigation(eventTable, screen, null);
-  setupVimKeysForNavigation(lastYearTable, screen, null);
+  setupVimKeysForNavigation(leftTable, screen, null, lastYearTable);
+  setupVimKeysForNavigation(list, screen, null, null);
+  setupVimKeysForNavigation(commandList, screen, null, null);
+  setupVimKeysForNavigation(editCalendarCommandList, screen, null, null);
+  setupVimKeysForNavigation(eventTable, screen, null, null);
+  setupVimKeysForNavigation(lastYearTable, screen, leftTable, null);
 
   // テーブル参照の初期化と元のレイアウト情報の保存
   leftTable.tableId = 'leftTable';
