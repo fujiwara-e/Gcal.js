@@ -9,9 +9,10 @@ export class Event {
   * @param {String} description
   * @param {String} calendarId
   * @param {String} calendarName
+  * @param {String} itemType
   * @return {Date}
   */
-  constructor(id, start, end, summary, description, calendarId, calendarName) {
+  constructor(id, start, end, summary, description, calendarId, calendarName, itemType = 'event') {
     this.id = id;
     this.start = start;
     this.end = end;
@@ -19,6 +20,7 @@ export class Event {
     this.description = description;
     this.calendarId = calendarId;
     this.calendarName = calendarName;
+    this.itemType = itemType;
   }
 
   /**
@@ -37,8 +39,22 @@ export class Event {
       e.summary,
       e.description || '',
       id,
-      summary || 'Unknown Calendar'
+      summary || 'Unknown Calendar',
+      detectItemType(e)
     );
+  }
+
+  getDisplayType() {
+    const typeLabels = {
+      birthday: 'Birthday',
+      focusTime: 'Focus',
+      fromGmail: 'Gmail',
+      outOfOffice: 'OOO',
+      workingLocation: 'Location',
+      default: 'Event',
+      event: 'Event',
+    };
+    return typeLabels[this.itemType] || this.itemType;
   }
 
   /**
@@ -51,6 +67,14 @@ export class Event {
     const startStr = `${this.start.getMonth() + 1}/${this.start.getDate()}`;
     return (startStr.includes(keyword) || this.summary.includes(keyword));
   }
+}
+
+function detectItemType(event) {
+  if (event.eventType && event.eventType !== 'default') {
+    return event.eventType;
+  }
+
+  return 'event';
 }
 
 export default Event;

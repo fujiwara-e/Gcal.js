@@ -2,11 +2,19 @@
  * テーブル・グラフの更新ロジック
  */
 import { fetchEvents } from '../services/calendarService.js';
-import { insertEventsToDatabase, fetchEventsFromDatabase } from '../services/databaseService.js';
+import {
+  insertEventsToDatabase,
+  fetchEventsFromDatabase,
+  replaceTasksInDatabase,
+  fetchTasksFromDatabase,
+} from '../services/databaseService.js';
+import { fetchTasks } from '../services/taskService.js';
 import { getDayOfWeek } from '../utils/dateUtils.js';
 import { createDisplayItems, searchDisplayItemIndex } from './displayItems.js';
 import { groupEventsByDate, formatDisplayItems } from './displayFormatter.js';
 import { insertDataToGraph } from './graph.js';
+import { filterDisplayableItems, sortItemsByStart } from '../utils/itemUtils.js';
+import { showTaskSetupNotice } from '../utils/taskNotice.js';
 
 /**
  * グラフを更新（新しいdisplayItems構造に対応）
@@ -61,19 +69,24 @@ export function updateGraph(screen, rightGraph, index, events, displayItems = nu
 
 export async function updateTable(auth, table, calendars, events, allEvents) {
   const newEvents = await fetchEvents(auth, calendars);
+  let newTasks = null;
+  try {
+    newTasks = await fetchTasks(auth);
+  } catch (_err) {
+    const logTable = table.screen.children.find(child => child.options.label === 'Gcal.js Log');
+    showTaskSetupNotice(logTable);
+  }
   await insertEventsToDatabase(newEvents);
+  if (newTasks) {
+    await replaceTasksInDatabase(newTasks);
+  }
   allEvents.length = 0;
   const fetchedEvent = await fetchEventsFromDatabase(calendars);
-  allEvents.push(...fetchedEvent);
+  const fetchedTasks = await fetchTasksFromDatabase();
+  allEvents.push(...sortItemsByStart([...fetchedEvent, ...fetchedTasks.filter(task => task.due)]));
   events.length = 0;
-  events.push(
-    ...allEvents.filter(
-      event =>
-        event.start.getFullYear() === new Date().getFullYear() ||
-        event.start.getFullYear() === new Date().getFullYear() + 1 ||
-        event.start.getFullYear() === new Date().getFullYear() - 1
-    )
-  );
+  events.push(...filterDisplayableItems([...allEvents], new Date()));
+  sortItemsByStart(events);
 
   const displayItems = createDisplayItems(events, new Date());
   const formattedEvents = formatDisplayItems(displayItems);
@@ -96,15 +109,8 @@ export function updateEventsAndUI(
   message
 ) {
   events.length = 0;
-  events.push(
-    ...allEvents.filter(
-      event =>
-        event.start.getFullYear() === targetDate.getFullYear() ||
-        event.start.getFullYear() === targetDate.getFullYear() + 1 ||
-        event.start.getFullYear() === targetDate.getFullYear() - 1
-    )
-  );
-  events.sort((a, b) => a.start - b.start);
+  events.push(...filterDisplayableItems([...allEvents], targetDate));
+  sortItemsByStart(events);
 
   const displayItems = createDisplayItems(events, targetDate);
   const formattedEvents = formatDisplayItems(displayItems);
