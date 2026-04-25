@@ -147,11 +147,29 @@ export function updateEventDetailTable(eventDetailTable, event) {
     return;
   }
 
+  if (event.isTask && event.isTask()) {
+    const due = event.due ? splitDateTimeIntoDateAndTime(event.due) : null;
+    const details = [
+      `Title: ${event.title || ''}`,
+      `Type: ${event.getDisplayType ? event.getDisplayType() : 'Task'}`,
+      `Status: ${event.isCompleted && event.isCompleted() ? 'Completed' : 'Needs Action'}`,
+      `Due: ${due ? due.date : 'No due date'}`,
+      `Task List: ${event.taskListName || ''}`,
+      '',
+      'Notes:',
+      `${event.notes || ''}`,
+    ];
+
+    eventDetailTable.setItems(details);
+    return;
+  }
+
   const { date: startDate, time: startTime } = splitDateTimeIntoDateAndTime(event.start);
   const { date: endDate, time: endTime } = splitDateTimeIntoDateAndTime(event.end);
 
   const details = [
     `Title: ${event.summary || ''}`,
+    `Type: ${event.getDisplayType ? event.getDisplayType() : (event.itemType || 'Event')}`,
     `Date: ${startDate}`,
     `Start Time: ${startTime}`,
     `End Time: ${endTime}`,
@@ -163,5 +181,3 @@ export function updateEventDetailTable(eventDetailTable, event) {
 
   eventDetailTable.setItems(details);
 }
-
-

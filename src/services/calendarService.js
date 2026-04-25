@@ -6,6 +6,7 @@ import {
   fetchCalendarsFromDatabase,
   setSyncTokenInDatabase,
   ensureDescriptionColumn,
+  ensureItemTypeColumn,
   deleteEventsFromDatabase,
   insertEventsToDatabase,
   fetchEventsFromDatabase,
@@ -84,13 +85,12 @@ export async function fetchEventFromCalendar(client, calendar) {
  */
 export async function fetchEvents(auth, calendars) {
   const client = google.calendar({ version: 'v3', auth });
-  let tasks = [];
+  const fetchPromises = [];
   for (const calendar of calendars) {
-    const task = fetchEventFromCalendar(client, calendar);
-    tasks.push(task);
+    fetchPromises.push(fetchEventFromCalendar(client, calendar));
   }
 
-  const events = await Promise.all(tasks);
+  const events = await Promise.all(fetchPromises);
   return events.flat();
 }
 
@@ -103,7 +103,8 @@ export async function initializeCalendars(auth) {
     await insertCalendarListToDatabase(calendars);
     calendars = await fetchCalendarsFromDatabase();
   } else {
-    ensureDescriptionColumn();
+    await ensureDescriptionColumn();
+    await ensureItemTypeColumn();
     calendars = await fetchCalendarsFromDatabase();
   }
   return calendars;

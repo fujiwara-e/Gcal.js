@@ -3,6 +3,7 @@ import { updateTable } from '../ui/tableUpdater.js';
 import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayFormatter.js';
 import { createAddForm } from '../ui/form.js';
 import { updateEventDetailTable } from '../ui/table.js';
+import { toggleTaskCompletion } from '../services/taskService.js';
 import path from 'path';
 import os from 'os';
 import {
@@ -28,6 +29,14 @@ export function editEvent(
   selectedDate = null,
   copyTargetDate = null
 ) {
+  const defaultEditItems = [
+    '選択日にイベントを追加',
+    'イベントを編集',
+    'イベントをコピー',
+    'イベントを削除',
+    '他のイベントを参照して選択日にコピー',
+  ];
+  const taskEditItems = ['Task の完了状態を切り替え'];
   const calendar = google.calendar({ version: 'v3', auth });
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
@@ -43,6 +52,9 @@ export function editEvent(
   const fallbackDateInfo = formatEventDate(fallbackDate);
   const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
   const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
+  const isTaskItem = Boolean(selectedEvent?.isTask && selectedEvent.isTask());
+
+  editCommandList.setItems(isTaskItem ? taskEditItems : defaultEditItems);
 
   updateEventDetailTable(eventDetailTable, selectedEvent);
   eventDetailTable.show();
@@ -107,6 +119,27 @@ export function editEvent(
   editCommandList.focus();
   editCommandList.once('select', async (item, index) => {
     eventDetailTable.hide();
+
+    if (isTaskItem) {
+      editCommandList.hide();
+
+      try {
+        const message = selectedEvent.isCompleted()
+          ? 'Task marked as not done.'
+          : 'Task marked as done.';
+        await toggleTaskCompletion(auth, selectedEvent);
+        await updateTable(auth, leftTable, calendars, events, allEvents);
+        logTable.log(message);
+      } catch (err) {
+        console.error('The API returned an error: ' + err);
+        logTable.log('Error: Failed to update task status.');
+      }
+
+      leftTable.focus();
+      screen.render();
+      editCommandList.setItems(defaultEditItems);
+      return;
+    }
 
     const promptCalendarSelection = handler => {
       editCommandList.hide();
@@ -411,6 +444,7 @@ export function editEvent(
   });
 
   editCommandList.key(['escape'], () => {
+    editCommandList.setItems(defaultEditItems);
     editCommandList.hide();
     eventDetailTable.hide();
     leftTable.focus();

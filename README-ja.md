@@ -34,7 +34,7 @@
 
 ## Requirements
 - Node.js
-- Google Cloud ConsoleでGoogle Calendar APIが有効になっていること
+- Google Cloud ConsoleでGoogle Calendar APIとGoogle Tasks APIが有効になっていること
 - credentials.jsonファイルがGoogle Cloud Consoleから取得され，プログラムのディレクトリに配置されていること
   - 詳細な設定手順については，[Google Calendar API 認証情報設定手順](./docs/oauth-ja.md)を参照
 
@@ -46,11 +46,12 @@
 npm install
 ```
 
-### Google Calendar APIの認証情報を設定
+### Google Calendar API / Google Tasks APIの認証情報を設定
 
-1. Google Cloud Consoleでプロジェクトを作成し，Google Calendar APIを有効化する
+1. Google Cloud Consoleでプロジェクトを作成し，Google Calendar APIとGoogle Tasks APIを有効化する
 2. 認証情報を作成し，OAuth 2.0クライアントIDを生成する
 3. credentials.jsonファイルをダウンロードし，このプログラムと同じディレクトリに保存する
+4. 既に `token.json` がある場合は削除して再認証する（Tasks 権限追加のため）
 
 ### コマンドのパスを設定
 
@@ -72,7 +73,7 @@ ln -s ~/git/Gcal.js/cldr cldr
 ## Usage
 ### 表示について
 Gcal.js を起動すると，3つのテーブルが表示される．  
-左には Google Calendar に登録されている予定，右上には予定が入っている日時を示すグラフ，右下にはログが表示される．  
+左には Google Calendar の予定と Google Tasks の期限付きタスク，右上には予定が入っている日時を示すグラフ，右下にはログが表示される．  
 カーソルが当たっている予定は，青色にハイライトされる．
 
 ### 基本操作

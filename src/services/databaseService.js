@@ -1,6 +1,7 @@
 import sqlite3 from "sqlite3";
 import { Calendar } from "../models/calendar.js";
 import { Event } from "../models/event.js";
+import Task from "../models/task.js";
 import { calendar } from "googleapis/build/src/apis/calendar/index.js";
 
 export async function mergeDuplicateEvents() {
@@ -33,8 +34,8 @@ export async function mergeDuplicateEvents() {
       await runQuery(db, `DELETE FROM Events WHERE id = ?`, [id]);
 
       await runQuery(db, `
-        INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName, itemType)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         id,
         mergedEvent.start,
@@ -42,7 +43,8 @@ export async function mergeDuplicateEvents() {
         mergedEvent.summary,
         mergedEvent.description,
         mergedEvent.calendarId,
-        mergedEvent.calendarName
+        mergedEvent.calendarName,
+        mergedEvent.itemType || 'event'
       ]);
     }
   } catch (err) {
@@ -55,10 +57,27 @@ export async function mergeDuplicateEvents() {
 
 export async function ensureDescriptionColumn() {
   const db = new sqlite3.Database("./db/Gcal.db");
-  const result = await allQuery(db, "PRAGMA table_info(Events)");
-  const columns = result.map(row => row.name);
-  if (!columns.includes('description')) {
-    await runQuery(db, "ALTER TABLE Events ADD COLUMN description TEXT");
+  try {
+    const result = await allQuery(db, "PRAGMA table_info(Events)");
+    const columns = result.map(row => row.name);
+    if (!columns.includes('description')) {
+      await runQuery(db, "ALTER TABLE Events ADD COLUMN description TEXT");
+    }
+  } finally {
+    db.close();
+  }
+}
+
+export async function ensureItemTypeColumn() {
+  const db = new sqlite3.Database("./db/Gcal.db");
+  try {
+    const result = await allQuery(db, "PRAGMA table_info(Events)");
+    const columns = result.map(row => row.name);
+    if (!columns.includes('itemType')) {
+      await runQuery(db, "ALTER TABLE Events ADD COLUMN itemType TEXT DEFAULT 'event'");
+    }
+  } finally {
+    db.close();
   }
 }
 
@@ -134,7 +153,7 @@ export async function configCalendarListInDatabase(calendarIDs) {
 }
 export async function deleteEventsFromDatabase(events) {
   const db = new sqlite3.Database("./db/Gcal.db");
-  await runQuery(db, "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT)");
+  await runQuery(db, "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event')");
   if (events.length > 0) {
     const deletePromises = events.map(event =>
 
@@ -167,7 +186,7 @@ export async function insertEventsToDatabase(events) {
   const db = new sqlite3.Database("./db/Gcal.db");
 
   try {
-    await runQuery(db, "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT)");
+    await runQuery(db, "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event')");
 
     if (events.length > 0) {
       for (const event of events) {
@@ -176,14 +195,14 @@ export async function insertEventsToDatabase(events) {
         if (existing.length === 0) {
           await runQuery(
             db,
-            "INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [event.id, event.start.toISOString(), event.end.toISOString(), event.summary, event.description, event.calendarId, event.calendarName]
+            "INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName, itemType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [event.id, event.start.toISOString(), event.end.toISOString(), event.summary, event.description, event.calendarId, event.calendarName, event.itemType || 'event']
           );
         } else {
           await runQuery(
             db,
-            "UPDATE Events SET start = ?, end = ?, summary = ?, description = ?, calendarId = ?, calendarName = ? WHERE id = ?",
-            [event.start.toISOString(), event.end.toISOString(), event.summary, event.description, event.calendarId, event.calendarName, event.id]
+            "UPDATE Events SET start = ?, end = ?, summary = ?, description = ?, calendarId = ?, calendarName = ?, itemType = ? WHERE id = ?",
+            [event.start.toISOString(), event.end.toISOString(), event.summary, event.description, event.calendarId, event.calendarName, event.itemType || 'event', event.id]
           );
         }
       }
@@ -208,7 +227,7 @@ export async function insertEventsToDatabase(events) {
 export async function fetchEventsFromDatabase(calendars) {
   const db = new sqlite3.Database("./db/Gcal.db");
   const events = [];
-  await runQuery(db, "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT)");
+  await runQuery(db, "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event')");
   await new Promise((resolve, reject) => {
     for (const calendar of calendars) {
       db.each(
@@ -220,7 +239,7 @@ export async function fetchEventsFromDatabase(calendars) {
           } else {
             const start = new Date(row.start);
             const end = new Date(row.end);
-            events.push(new Event(row.id, start, end, row.summary, row.description, row.calendarId, row.calendarName));
+            events.push(new Event(row.id, start, end, row.summary, row.description, row.calendarId, row.calendarName, row.itemType || 'event'));
           }
         },
         (err, rowCount) => {
@@ -290,4 +309,108 @@ export async function fetchCalendarsFromDatabase() {
   });
 
   return calendars;
+}
+
+export async function replaceTasksInDatabase(tasks) {
+  const db = new sqlite3.Database("./db/Gcal.db");
+
+  try {
+    await runQuery(
+      db,
+      "CREATE TABLE IF NOT EXISTS Tasks (id TEXT PRIMARY KEY, title TEXT, notes TEXT, due TEXT, status TEXT, completed TEXT, taskListId TEXT, taskListName TEXT)"
+    );
+    await runQuery(db, "DELETE FROM Tasks");
+
+    for (const task of tasks) {
+      await runQuery(
+        db,
+        "INSERT INTO Tasks (id, title, notes, due, status, completed, taskListId, taskListName) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          task.id,
+          task.title,
+          task.notes,
+          task.getDueISOString(),
+          task.status,
+          task.completed ? task.completed.toISOString() : null,
+          task.taskListId,
+          task.taskListName,
+        ]
+      );
+    }
+  } catch (err) {
+    console.error("Error replacing tasks:", err);
+    throw err;
+  } finally {
+    await new Promise((resolve, reject) => {
+      db.close(err => {
+        if (err) {
+          console.error("Error closing database:", err.message);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+}
+
+export async function fetchTasksFromDatabase() {
+  const db = new sqlite3.Database("./db/Gcal.db");
+  const tasks = [];
+
+  await runQuery(
+    db,
+    "CREATE TABLE IF NOT EXISTS Tasks (id TEXT PRIMARY KEY, title TEXT, notes TEXT, due TEXT, status TEXT, completed TEXT, taskListId TEXT, taskListName TEXT)"
+  );
+
+  await new Promise((resolve, reject) => {
+    db.each(
+      "SELECT * FROM Tasks",
+      (err, row) => {
+        if (err) {
+          console.error("Error fetching tasks:", err.message);
+          reject(err);
+        } else {
+          tasks.push(new Task(
+            row.id,
+            row.title,
+            row.notes,
+            row.due,
+            row.status,
+            row.completed ? new Date(row.completed) : null,
+            row.taskListId,
+            row.taskListName
+          ));
+        }
+      },
+      err => {
+        if (err) {
+          console.error("Error completing task iteration:", err.message);
+          reject(err);
+        } else {
+          resolve();
+        }
+      }
+    );
+  });
+
+  await new Promise((resolve, reject) => {
+    db.close(err => {
+      if (err) {
+        console.error("Error closing database:", err.message);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+
+  tasks.sort((a, b) => {
+    if (!a.start && !b.start) return 0;
+    if (!a.start) return 1;
+    if (!b.start) return -1;
+    return a.start - b.start;
+  });
+
+  return tasks;
 }

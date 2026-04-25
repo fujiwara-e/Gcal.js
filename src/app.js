@@ -3,11 +3,14 @@ import { createLayout, removeCommandPopup } from './ui/layout.js';
 import { handleInput } from './ui/inputHandler.js';
 import { authorize } from './services/authService.js';
 import { initializeCalendars, initializeEvents } from './services/calendarService.js';
+import { initializeTasks } from './services/taskService.js';
 import { editEvent, copyEventToDate } from './commands/edit.js';
 import { hasUpdates, isForkedRepository } from './commands/update.js';
 import { loadSetting } from './services/settingService.js';
 import { setupKeyBindings } from './ui/keyConfig.js';
 import { findInLastYear } from './commands/find.js';
+import { filterDisplayableItems, sortItemsByStart } from './utils/itemUtils.js';
+import { showTaskSetupNotice } from './utils/taskNotice.js';
 
 export async function runApp() {
   console.log('Running app ...');
@@ -17,16 +20,17 @@ export async function runApp() {
   const updateAvailable = await hasUpdates(isForked);
   const auth = await authorize();
   const calendars = await initializeCalendars(auth);
-  var allEvents = await initializeEvents(auth, calendars);
-  var events = [
-    ...allEvents.filter(
-      event =>
-        event.start.getFullYear() === new Date().getFullYear() ||
-        event.start.getFullYear() === new Date().getFullYear() + 1 ||
-        event.start.getFullYear() === new Date().getFullYear() - 1
-    ),
-  ];
-  events.sort((a, b) => a.start - b.start);
+  const calendarEvents = await initializeEvents(auth, calendars);
+  let taskSetupRequired = false;
+  let tasks = [];
+  try {
+    tasks = await initializeTasks(auth);
+  } catch (_err) {
+    taskSetupRequired = true;
+  }
+  var allEvents = sortItemsByStart([...calendarEvents, ...tasks.filter(task => task.due)]);
+  var events = filterDisplayableItems([...allEvents], new Date());
+  sortItemsByStart(events);
 
   const { screen, inputBox, keypressListener, lastYearTable } = createLayout(calendars, events);
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
@@ -41,6 +45,10 @@ export async function runApp() {
     );
   } else {
     logTable.log('{blue-fg}You are using the latest version of the app.{/blue-fg}');
+  }
+
+  if (taskSetupRequired) {
+    showTaskSetupNotice(logTable);
   }
 
   inputBox.on('submit', value => {

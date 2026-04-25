@@ -7,5 +7,5 @@ export function syncCommand(auth, screen, calendars, events, allEvents, keypress
   leftTable.on('keypress', keypressListener);
   updateTable(auth, leftTable, calendars, events, allEvents);
   mergeDuplicateEvents();
-  logTable.log('Synced with Google Calendar!');
+  logTable.log('Synced with Google Calendar and Tasks!');
 }
