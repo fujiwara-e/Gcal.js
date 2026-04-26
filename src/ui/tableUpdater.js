@@ -59,7 +59,10 @@ export function updateGraph(screen, rightGraph, index, events, displayItems = nu
     const dayTimes = dayEvents.map(event => {
       const startTime = event.start.toTimeString().slice(0, 5);
       const endTime = event.end ? event.end.toTimeString().slice(0, 5) : '';
-      return endTime ? `${startTime}-${endTime}` : startTime;
+      return {
+        time: endTime ? `${startTime}-${endTime}` : startTime,
+        calendarId: event.calendarId || null,
+      };
     });
 
     filledTime.push(dayTimes);
