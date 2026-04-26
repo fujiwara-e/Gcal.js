@@ -1,7 +1,7 @@
 import blessed from 'blessed';
 
 export function createAddForm(screen) {
-  let formBox = screen.children.find(child => child.options.label === 'Add Event');
+  let formBox = screen.children.find(child => child.options.formType === 'event');
   if (formBox) {
     return {
       formBox,
@@ -18,6 +18,7 @@ export function createAddForm(screen) {
     border: { type: 'line', fg: 'cyan' },
     hidden: true,
     keys: true,
+    formType: 'event',
   });
 
   const formFields = {
@@ -98,13 +99,93 @@ export function createAddForm(screen) {
   return { formBox, formFields };
 }
 
+export function createTaskForm(screen) {
+  let formBox = screen.children.find(child => child.options.formType === 'task');
+  if (formBox) {
+    return {
+      formBox,
+      formFields: getExistingTaskFormFields(formBox)
+    };
+  }
+
+  formBox = blessed.form({
+    top: 0,
+    left: '50%',
+    width: '50%',
+    height: '100%',
+    label: 'Add Task',
+    border: { type: 'line', fg: 'cyan' },
+    hidden: true,
+    keys: true,
+    formType: 'task',
+  });
+
+  const formFields = {
+    title: blessed.textbox({
+      top: 2,
+      left: 2,
+      width: '90%-4',
+      height: 3,
+      label: 'Task Title',
+      border: { type: 'line', fg: 'white' },
+      inputOnFocus: true,
+      mouse: true,
+    }),
+    date: blessed.textbox({
+      top: 6,
+      left: 2,
+      width: '90%-4',
+      height: 3,
+      label: 'Date (YYYY-MM-DD)',
+      border: { type: 'line', fg: 'white' },
+      inputOnFocus: true,
+      mouse: true,
+    }),
+    description: blessed.textbox({
+      top: 10,
+      left: 2,
+      width: '90%-4',
+      height: 3,
+      label: 'Notes',
+      border: { type: 'line', fg: 'white' },
+      inputOnFocus: true,
+      mouse: true,
+    }),
+  };
+
+  Object.values(formFields).forEach(field => formBox.append(field));
+
+  Object.values(formFields).forEach((field, index, fields) => {
+    field.listeners('submit').forEach(listener => field.off('submit', listener));
+
+    field.on('submit', () => {
+      const nextField = fields[(index + 1) % fields.length];
+      nextField.focus();
+      screen.render();
+    });
+  });
+
+  screen.append(formBox);
+  screen.render();
+  return { formBox, formFields };
+}
+
 function getExistingFormFields(formBox) {
   return {
     title: formBox.children.find(child => child.options.label === 'Event Title'),
     description: formBox.children.find(child => child.options.label === 'Description'),
     date: formBox.children.find(child => child.options.label === 'Date (YYYY-MM-DD)'),
     startTime: formBox.children.find(child => child.options.label === 'Start Time (HH:mm)'),
-    endTime: formBox.children.find(child => child.options.label === 'End Time (HH:mm)')
+    endTime: formBox.children.find(child => child.options.label === 'End Time (HH:mm)'),
+    all_day: formBox.children.find(child => child.options.content === 'All Day'),
+  };
+}
+
+function getExistingTaskFormFields(formBox) {
+  return {
+    title: formBox.children.find(child => child.options.label === 'Task Title'),
+    date: formBox.children.find(child => child.options.label === 'Date (YYYY-MM-DD)'),
+    description: formBox.children.find(child => child.options.label === 'Notes'),
   };
 }
 

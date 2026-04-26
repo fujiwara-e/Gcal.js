@@ -66,3 +66,31 @@ export async function toggleTaskCompletion(auth, task) {
 
   return Task.fromGAPITask(res.data, task.taskListId, task.taskListName);
 }
+
+export async function createTask(auth, taskListId, taskListName, values) {
+  const tasksClient = createTasksClient(auth);
+  const requestBody = {
+    title: values.title,
+    notes: values.description || '',
+  };
+
+  if (values.date) {
+    requestBody.due = `${values.date}T00:00:00.000Z`;
+  }
+
+  const res = await tasksClient.tasks.insert({
+    tasklist: taskListId,
+    requestBody,
+  });
+
+  return Task.fromGAPITask(res.data, taskListId, taskListName);
+}
+
+export async function deleteTask(auth, task) {
+  const tasksClient = createTasksClient(auth);
+
+  await tasksClient.tasks.delete({
+    tasklist: task.taskListId,
+    task: task.id,
+  });
+}

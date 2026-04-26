@@ -1,11 +1,17 @@
 import { google } from 'googleapis';
 import { updateTable } from '../ui/tableUpdater.js';
 import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayFormatter.js';
-import { createAddForm } from '../ui/form.js';
+import { createAddForm, createTaskForm } from '../ui/form.js';
 import { updateEventDetailTable } from '../ui/table.js';
-import { toggleTaskCompletion } from '../services/taskService.js';
+import {
+  fetchTaskLists,
+  createTask,
+  toggleTaskCompletion,
+  deleteTask,
+} from '../services/taskService.js';
 import path from 'path';
 import os from 'os';
+import { openExternalEditor } from '../utils/editor.js';
 import {
   applyDetailsToForm,
   collectFormValues,
@@ -19,6 +25,11 @@ import {
   setupEscapeShortcut,
 } from '../utils/eventFormUtils.js';
 
+const TASK_ENTER_HANDLER_KEY = Symbol('taskEnterHandler');
+const TASK_SAVE_HANDLER_KEY = Symbol('taskSaveHandler');
+const TASK_ESCAPE_HANDLER_KEY = Symbol('taskEscapeHandler');
+const TASK_LIST_SELECTION_HANDLER_KEY = Symbol('taskListSelectionHandler');
+
 export function editEvent(
   auth,
   screen,
@@ -31,12 +42,13 @@ export function editEvent(
 ) {
   const defaultEditItems = [
     '選択日にイベントを追加',
+    '選択日にタスクを追加',
     'イベントを編集',
     'イベントをコピー',
     'イベントを削除',
     '他のイベントを参照して選択日にコピー',
   ];
-  const taskEditItems = ['Task の完了状態を切り替え'];
+  const taskEditItems = ['Task の完了状態を切り替え', 'Task を削除'];
   const calendar = google.calendar({ version: 'v3', auth });
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
@@ -45,7 +57,9 @@ export function editEvent(
   const editCommandList = screen.children.find(child => child.options.label === 'Edit List');
   const eventDetailTable = screen.children.find(child => child.options.label === 'Event Details');
   const { formBox, formFields } = createAddForm(screen);
+  const { formBox: taskFormBox, formFields: taskFormFields } = createTaskForm(screen);
   const tempFilePath = path.join(os.tmpdir(), 'blessed-editor.txt');
+  const taskTempFilePath = path.join(os.tmpdir(), 'blessed-task-editor.txt');
   const selectedCalendarId = selectedEvent?.calendarId ?? null;
   const selectedEventsId = selectedEvent?.id ?? null;
   const fallbackDate = selectedEvent?.start || selectedDate || new Date();
@@ -64,6 +78,11 @@ export function editEvent(
     screen.render();
   };
 
+  const showTaskValidationError = () => {
+    logTable.log('Error: Task title and date must be filled in.');
+    screen.render();
+  };
+
   const finalizeSuccess = async message => {
     await updateTable(auth, leftTable, calendars, events, allEvents);
     logTable.log(message);
@@ -74,6 +93,203 @@ export function editEvent(
     leftTable.focus();
     screen.render();
   };
+
+  const finalizeTaskSuccess = async message => {
+    await updateTable(auth, leftTable, calendars, events, allEvents);
+    logTable.log(message);
+    if (!taskFormBox.destroyed) {
+      taskFormBox.destroy();
+    }
+    screen.render();
+    leftTable.focus();
+    screen.render();
+  };
+
+  const setTaskFormValues = values => {
+    taskFormFields.title.setValue(values.title || '');
+    taskFormFields.date.setValue(values.date || '');
+    taskFormFields.description.setValue(values.description || '');
+  };
+
+  const collectTaskFormValues = () => ({
+    title: taskFormFields.title.getValue().trim(),
+    date: taskFormFields.date.getValue().trim(),
+    description: taskFormFields.description.getValue().trim(),
+  });
+
+  const buildTaskEditorContent = values => {
+    const lines = [
+      `Task Title | ${values.title || ''}`,
+      `Date (YYYY-MM-DD) | ${values.date || ''}`,
+      `Notes | ${values.description || ''}`,
+    ];
+    return `${lines.join('\n')}\n`;
+  };
+
+  const parseTaskEditorContent = text => {
+    const details = {};
+    text.split('\n').forEach(line => {
+      const parts = line.split('|').map(part => part.trim());
+      if (parts.length === 2) {
+        const [label, value] = parts;
+        details[label] = value;
+      }
+    });
+
+    return {
+      title: details['Task Title'] || '',
+      date: details['Date (YYYY-MM-DD)'] || '',
+      description: details['Notes'] || '',
+    };
+  };
+
+  const setupTaskEditorShortcut = () => {
+    const handler = async () => {
+      const currentValues = collectTaskFormValues();
+      const updatedText = await openEditorAndParseTask(screen, taskTempFilePath, currentValues);
+      if (updatedText) {
+        setTaskFormValues(updatedText);
+        screen.render();
+      }
+    };
+
+    if (taskFormBox[TASK_ENTER_HANDLER_KEY]) {
+      taskFormBox.unkey(['enter'], taskFormBox[TASK_ENTER_HANDLER_KEY]);
+    }
+
+    taskFormBox.key(['enter'], handler);
+    taskFormBox[TASK_ENTER_HANDLER_KEY] = handler;
+  };
+
+  const setupTaskEscapeShortcut = () => {
+    const handler = () => {
+      if (!taskFormBox.destroyed) {
+        taskFormBox.hide();
+      }
+      leftTable.focus();
+      screen.render();
+      logTable.log('Add task cancelled.');
+    };
+
+    if (taskFormBox[TASK_ESCAPE_HANDLER_KEY]) {
+      taskFormBox.unkey(['escape'], taskFormBox[TASK_ESCAPE_HANDLER_KEY]);
+    }
+
+    taskFormBox.key(['escape'], handler);
+    taskFormBox[TASK_ESCAPE_HANDLER_KEY] = handler;
+  };
+
+  const setupTaskSaveShortcut = ({ handler }) => {
+    const wrappedHandler = async () => {
+      try {
+        await handler(collectTaskFormValues());
+      } catch (err) {
+        console.error('Unexpected error while saving task:', err);
+      }
+    };
+
+    if (taskFormBox[TASK_SAVE_HANDLER_KEY]) {
+      taskFormBox.unkey(['C-s'], taskFormBox[TASK_SAVE_HANDLER_KEY]);
+    }
+
+    taskFormBox.key(['C-s'], wrappedHandler);
+    taskFormBox[TASK_SAVE_HANDLER_KEY] = wrappedHandler;
+  };
+
+  async function openEditorAndParseTask(screen, tempPath, values) {
+    const updatedText = await openExternalEditor(screen, tempPath, buildTaskEditorContent(values));
+
+    if (!updatedText) {
+      return null;
+    }
+
+    return parseTaskEditorContent(updatedText);
+  }
+
+  async function promptTaskListSelection(handler) {
+    const originalItems = calendarList.items.map(item => item.content);
+    const originalLabel = calendarList.options.label;
+    let taskLists = [];
+
+    try {
+      taskLists = await fetchTaskLists(auth);
+    } catch (err) {
+      console.error('The API returned an error: ' + err);
+      logTable.log('Error: Failed to load task lists.');
+      screen.render();
+      return;
+    }
+
+    if (!taskLists.length) {
+      logTable.log('Error: No task lists available.');
+      screen.render();
+      return;
+    }
+
+    const restoreCalendarList = () => {
+      calendarList.setItems(originalItems);
+      calendarList.setLabel(originalLabel);
+      if (calendarList[TASK_LIST_SELECTION_HANDLER_KEY]) {
+        calendarList.unkey(['escape'], calendarList[TASK_LIST_SELECTION_HANDLER_KEY]);
+        calendarList[TASK_LIST_SELECTION_HANDLER_KEY] = null;
+      }
+    };
+
+    calendarList.setItems(taskLists.map(taskList => taskList.title));
+    calendarList.setLabel('Task List');
+    editCommandList.hide();
+    calendarList.show();
+    calendarList.focus();
+    screen.render();
+
+    const escapeHandler = () => {
+      restoreCalendarList();
+      calendarList.hide();
+      editCommandList.show();
+      editCommandList.focus();
+      screen.render();
+    };
+
+    calendarList.key(['escape'], escapeHandler);
+    calendarList[TASK_LIST_SELECTION_HANDLER_KEY] = escapeHandler;
+
+    calendarList.once('select', async (_taskItem, taskIndex) => {
+      const selectedTaskList = taskLists[taskIndex];
+
+      restoreCalendarList();
+      calendarList.hide();
+      screen.render();
+
+      if (!selectedTaskList) {
+        logTable.log('Error: Invalid task list selection.');
+        editCommandList.show();
+        editCommandList.focus();
+        screen.render();
+        return;
+      }
+
+      await handler(selectedTaskList);
+    });
+  }
+
+  async function prepareTaskForm({ label, initialValues, openEditorImmediately = false }) {
+    taskFormBox.setLabel(label);
+    setTaskFormValues(initialValues);
+    taskFormBox.show();
+    taskFormBox.focus();
+    screen.render();
+
+    setupTaskEditorShortcut();
+    setupTaskEscapeShortcut();
+
+    if (openEditorImmediately) {
+      const updatedValues = await openEditorAndParseTask(screen, taskTempFilePath, initialValues);
+      if (updatedValues) {
+        setTaskFormValues(updatedValues);
+        screen.render();
+      }
+    }
+  }
 
   async function prepareForm({
     label,
@@ -124,15 +340,21 @@ export function editEvent(
       editCommandList.hide();
 
       try {
-        const message = selectedEvent.isCompleted()
-          ? 'Task marked as not done.'
-          : 'Task marked as done.';
-        await toggleTaskCompletion(auth, selectedEvent);
-        await updateTable(auth, leftTable, calendars, events, allEvents);
-        logTable.log(message);
+        if (index === 0) {
+          const message = selectedEvent.isCompleted()
+            ? 'Task marked as not done.'
+            : 'Task marked as done.';
+          await toggleTaskCompletion(auth, selectedEvent);
+          await updateTable(auth, leftTable, calendars, events, allEvents);
+          logTable.log(message);
+        } else if (index === 1) {
+          await deleteTask(auth, selectedEvent);
+          await updateTable(auth, leftTable, calendars, events, allEvents);
+          logTable.log('Task successfully deleted!');
+        }
       } catch (err) {
         console.error('The API returned an error: ' + err);
-        logTable.log('Error: Failed to update task status.');
+        logTable.log(index === 1 ? 'Error: Failed to delete task.' : 'Error: Failed to update task status.');
       }
 
       leftTable.focus();
@@ -219,6 +441,34 @@ export function editEvent(
         break;
 
       case 1:
+        promptTaskListSelection(async selectedTaskList => {
+          const initialValues = {
+            title: '',
+            date: fallbackDateInfo?.date || '',
+            description: '',
+          };
+
+          await prepareTaskForm({
+            label: `Add Task - ${selectedTaskList.title}  (Ctrl+S to save)`,
+            initialValues,
+            openEditorImmediately: true,
+          });
+
+          setupTaskSaveShortcut({
+            handler: async values => {
+              if (!values.title || !values.date) {
+                showTaskValidationError();
+                return;
+              }
+
+              await createTask(auth, selectedTaskList.id, selectedTaskList.title, values);
+              await finalizeTaskSuccess('Task successfully registered!');
+            },
+          });
+        });
+        break;
+
+      case 2:
         promptCalendarSelection(async (selectedEditCalendar, selectedEditCalendarId) => {
           if (!selectedEvent || !selectedCalendarId || !selectedEventsId) {
             logTable.log('Error: No event selected to move.');
@@ -282,7 +532,7 @@ export function editEvent(
         });
         break;
 
-      case 2:
+      case 3:
         promptCalendarSelection(async (selectedEditCalendar, selectedEditCalendarId) => {
           const initialValues = eventToFormValues(selectedEvent, fallbackDate);
           if (copyTargetDate) {
@@ -331,7 +581,7 @@ export function editEvent(
         });
         break;
 
-      case 3:
+      case 4:
         editCommandList.hide();
         if (!selectedEvent || !selectedCalendarId || !selectedEventsId) {
           logTable.log('Error: No event selected to delete.');
@@ -358,7 +608,7 @@ export function editEvent(
         );
         break;
 
-      case 4: {
+      case 5: {
         screen.append(eventTable);
         eventTable.show();
         editCommandList.hide();
