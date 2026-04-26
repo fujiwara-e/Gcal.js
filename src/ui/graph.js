@@ -25,7 +25,7 @@ export function createGraph(screen) {
 export function insertDataToGraph(screen, table, eventsDataTimes, monday) {
   const timeColumnWidth = 5;
   const columnGap = ' ';
-  const dayColumnWidth = 3;
+  const dayColumnWidth = 5;
   const dayLabels = [
     'Mon',
     'Tue',
@@ -46,6 +46,38 @@ export function insertDataToGraph(screen, table, eventsDataTimes, monday) {
     return `${' '.repeat(Math.max(leftPadding, 0))}${text}${' '.repeat(rightPadding)}`;
   };
 
+  const countHourFilled = (dayTimes, hour) =>
+    dayTimes.filter(eventTime => {
+      const [start, end] = eventTime.split('-');
+      const startHour = parseInt(start.split(':')[0], 10);
+      const endHour = parseInt(end.split(':')[0], 10);
+      const endMinute = parseInt(end.split(':')[1], 10);
+      return hour >= startHour && (hour < endHour || (hour === endHour && endMinute > 0));
+    }).length;
+
+  const filledCountMatrix = Array.from({ length: 24 }, (_, hour) =>
+    Array.from({ length: 7 }, (_, day) => {
+      const dayTimes = eventsDataTimes[day] || [];
+      return Math.min(countHourFilled(dayTimes, hour), 2);
+    })
+  );
+
+  const blockCharForSlot = (hour, day, slot) => {
+    const isFilled = filledCountMatrix[hour][day] > slot;
+    if (!isFilled) {
+      return '-';
+    }
+    const prevFilled = hour > 0 && filledCountMatrix[hour - 1][day] > slot;
+    const nextFilled = hour < 23 && filledCountMatrix[hour + 1][day] > slot;
+    return prevFilled || nextFilled ? '█' : '■';
+  };
+
+  const blockChars = (hour, day) => {
+    const firstSlot = blockCharForSlot(hour, day, 0);
+    const secondSlot = blockCharForSlot(hour, day, 1);
+    return `${firstSlot}${secondSlot}`;
+  };
+
   const filledTime = [];
   for (let hour = 0; hour < 24; hour++) {
     const hourStart = hour < 10 ? `0${hour}` : `${hour}`;
@@ -54,15 +86,7 @@ export function insertDataToGraph(screen, table, eventsDataTimes, monday) {
     const weekData = [];
 
     for (let day = 0; day < 7; day++) {
-      const dayTimes = eventsDataTimes[day] || [];
-      const isFilled = dayTimes.some(eventTime => {
-        const [start, end] = eventTime.split('-');
-        const startHour = parseInt(start.split(':')[0], 10);
-        const endHour = parseInt(end.split(':')[0], 10);
-        const endMinute = parseInt(end.split(':')[1], 10);
-        return hour >= startHour && (hour < endHour || (hour === endHour && endMinute > 0));
-      });
-      weekData.push(centerCell(isFilled ? '■' : '-', dayColumnWidth));
+      weekData.push(centerCell(blockChars(hour, day), dayColumnWidth));
     }
     filledTime.push(`${timeSlot.padEnd(timeColumnWidth)}${columnGap}${weekData.join(columnGap)}`);
   }
