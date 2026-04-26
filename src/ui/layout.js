@@ -237,6 +237,7 @@ export function createLayout(calendars, events) {
     height: '20%',
     items: [
       '選択日にイベントを追加',
+      '選択日にタスクを追加',
       'イベントを編集',
       'イベントをコピー',
       'イベントを削除',
