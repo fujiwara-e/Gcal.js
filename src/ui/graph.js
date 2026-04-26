@@ -23,36 +23,56 @@ export function createGraph(screen) {
 }
 
 export function insertDataToGraph(screen, table, eventsDataTimes, monday) {
+  const timeColumnWidth = 5;
+  const columnGap = ' ';
+  const dayColumnWidth = 3;
+  const dayLabels = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    '{blue-fg}Sat{/blue-fg}',
+    '{red-fg}Sun{/red-fg}',
+  ];
+  const visibleLength = text => text.replace(/\{[^}]+\}/g, '').length;
+  const padCell = (text, width) => {
+    const padding = Math.max(width - visibleLength(text), 0);
+    return `${text}${' '.repeat(padding)}`;
+  };
+  const centerCell = (text, width) => {
+    const leftPadding = Math.floor((width - text.length) / 2);
+    const rightPadding = Math.max(width - text.length - leftPadding, 0);
+    return `${' '.repeat(Math.max(leftPadding, 0))}${text}${' '.repeat(rightPadding)}`;
+  };
+
   const filledTime = [];
   for (let hour = 0; hour < 24; hour++) {
-    const hourStart = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-    const hourEnd = hour + 1 < 10 ? `0${hour + 1}:00` : `${hour + 1}:00`;
+    const hourStart = hour < 10 ? `0${hour}` : `${hour}`;
+    const hourEnd = hour + 1 < 10 ? `0${hour + 1}` : `${hour + 1}`;
     const timeSlot = `${hourStart}-${hourEnd}`;
-    const weekData = [timeSlot];
+    const weekData = [];
 
     for (let day = 0; day < 7; day++) {
       const dayTimes = eventsDataTimes[day] || [];
-      const isFilled = dayTimes.some((eventTime) => {
+      const isFilled = dayTimes.some(eventTime => {
         const [start, end] = eventTime.split('-');
         const startHour = parseInt(start.split(':')[0], 10);
         const endHour = parseInt(end.split(':')[0], 10);
         const endMinute = parseInt(end.split(':')[1], 10);
         return hour >= startHour && (hour < endHour || (hour === endHour && endMinute > 0));
       });
-      weekData.push(isFilled ? '■' : '-');
+      weekData.push(centerCell(isFilled ? '■' : '-', dayColumnWidth));
     }
-    filledTime.push(weekData.join('     '));
+    filledTime.push(`${timeSlot.padEnd(timeColumnWidth)}${columnGap}${weekData.join(columnGap)}`);
   }
 
-  const firstday = monday.toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const secondDay = monday.addDays(1).toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const thirdDay = monday.addDays(2).toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const fourthDay = monday.addDays(3).toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const fifthDay = monday.addDays(4).toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const sixthDay = monday.addDays(5).toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const lastday = monday.addDays(6).toLocalISOString().split('T')[0].split('-').slice(1).join('/');;
-  const dayText = `              ${firstday} ${secondDay} ${thirdDay} ${fourthDay} ${fifthDay} ${sixthDay} ${lastday}`;
-  const headers = "   Time        Mon   Tue   Wed   Thu   Fri   {blue-fg}Sat{/blue-fg}   {red-fg}Sun{/red-fg}";
+  const weekDates = Array.from(
+    { length: 7 },
+    (_, offset) => monday.addDays(offset).toLocalISOString().split('T')[0].split('-')[2]
+  );
+  const dayText = `${' '.repeat(timeColumnWidth)}${columnGap}${weekDates.map(date => padCell(date, dayColumnWidth)).join(columnGap)}`;
+  const headers = `${'Time'.padEnd(timeColumnWidth)}${columnGap}${dayLabels.map(label => padCell(label, dayColumnWidth)).join(columnGap)}`;
   table.setItems([dayText, headers, ...filledTime]);
 
   screen.render();
