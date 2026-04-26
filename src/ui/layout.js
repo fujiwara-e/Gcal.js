@@ -8,7 +8,7 @@ import {
   createLeftTable,
   createLogTable,
 } from './table.js';
-import { createGraph } from './graph.js';
+import { createGraph, setCalendarColorMap } from './graph.js';
 import {
   createDisplayItems,
   createLastYearDisplayItems,
@@ -37,6 +37,7 @@ export function removeCommandPopup() {
 }
 
 export function createLayout(calendars, events) {
+  setCalendarColorMap(calendars);
   const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
 
   const commands = fetchCommandList();

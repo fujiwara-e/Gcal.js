@@ -1,6 +1,18 @@
 import blessed from 'blessed';
 import contrib from 'blessed-contrib';
 
+const DEFAULT_GRAPH_COLOR = '#2bc4ff';
+const calendarColorById = new Map();
+
+export function setCalendarColorMap(calendars) {
+  calendarColorById.clear();
+  for (const calendar of calendars || []) {
+    if (calendar && calendar.id) {
+      calendarColorById.set(calendar.id, calendar.backgroundColor || null);
+    }
+  }
+}
+
 export function createGraph(screen) {
   const table = blessed.list({
     keys: true,
@@ -41,24 +53,113 @@ export function insertDataToGraph(screen, table, eventsDataTimes, monday) {
     return `${text}${' '.repeat(padding)}`;
   };
   const centerCell = (text, width) => {
-    const leftPadding = Math.floor((width - text.length) / 2);
-    const rightPadding = Math.max(width - text.length - leftPadding, 0);
+    const len = visibleLength(text);
+    const leftPadding = Math.floor((width - len) / 2);
+    const rightPadding = Math.max(width - len - leftPadding, 0);
     return `${' '.repeat(Math.max(leftPadding, 0))}${text}${' '.repeat(rightPadding)}`;
   };
 
-  const countHourFilled = (dayTimes, hour) =>
-    dayTimes.filter(eventTime => {
-      const [start, end] = eventTime.split('-');
-      const startHour = parseInt(start.split(':')[0], 10);
-      const endHour = parseInt(end.split(':')[0], 10);
-      const endMinute = parseInt(end.split(':')[1], 10);
-      return hour >= startHour && (hour < endHour || (hour === endHour && endMinute > 0));
-    }).length;
+  const normalizeDayTime = dayTime => {
+    if (typeof dayTime === 'string') {
+      return { time: dayTime, calendarId: null };
+    }
+    return {
+      time: dayTime?.time || '',
+      calendarId: dayTime?.calendarId || null,
+    };
+  };
+
+  const parseRange = timeText => {
+    const [startRaw, endRaw] = String(timeText || '').split('-');
+    if (!startRaw) {
+      return null;
+    }
+    const [startHourStr, startMinuteStr = '0'] = startRaw.split(':');
+    const startHour = parseInt(startHourStr, 10);
+    const startMinute = parseInt(startMinuteStr, 10);
+
+    if (!Number.isInteger(startHour) || !Number.isInteger(startMinute)) {
+      return null;
+    }
+
+    if (!endRaw) {
+      const nextHour = Math.min(startHour + 1, 24);
+      return {
+        startHour,
+        startMinute,
+        endHour: nextHour,
+        endMinute: startMinute,
+      };
+    }
+
+    const [endHourStr, endMinuteStr = '0'] = endRaw.split(':');
+    const endHour = parseInt(endHourStr, 10);
+    const endMinute = parseInt(endMinuteStr, 10);
+    if (!Number.isInteger(endHour) || !Number.isInteger(endMinute)) {
+      return null;
+    }
+
+    return {
+      startHour,
+      startMinute,
+      endHour,
+      endMinute,
+    };
+  };
+
+  const overlapsHour = (range, hour) => {
+    if (!range) {
+      return false;
+    }
+    return (
+      hour >= range.startHour &&
+      (hour < range.endHour || (hour === range.endHour && range.endMinute > 0))
+    );
+  };
+
+  const resolveColor = normalized => {
+    if (!normalized.calendarId) {
+      return { color: DEFAULT_GRAPH_COLOR, resolved: false };
+    }
+    const color = calendarColorById.get(normalized.calendarId);
+    if (!color) {
+      return { color: DEFAULT_GRAPH_COLOR, resolved: false };
+    }
+    return { color, resolved: true };
+  };
+
+  const getOverlappingColors = (dayTimes, hour) => {
+    const resolvedColors = [];
+    const fallbackColors = [];
+
+    for (const dayTime of dayTimes) {
+      const normalized = normalizeDayTime(dayTime);
+      if (!overlapsHour(parseRange(normalized.time), hour)) {
+        continue;
+      }
+
+      const colorInfo = resolveColor(normalized);
+      if (colorInfo.resolved) {
+        resolvedColors.push(colorInfo.color);
+      } else {
+        fallbackColors.push(colorInfo.color);
+      }
+    }
+
+    return [...resolvedColors, ...fallbackColors];
+  };
 
   const filledCountMatrix = Array.from({ length: 24 }, (_, hour) =>
     Array.from({ length: 7 }, (_, day) => {
       const dayTimes = eventsDataTimes[day] || [];
-      return Math.min(countHourFilled(dayTimes, hour), 2);
+      return Math.min(getOverlappingColors(dayTimes, hour).length, 2);
+    })
+  );
+
+  const slotColorMatrix = Array.from({ length: 24 }, (_, hour) =>
+    Array.from({ length: 7 }, (_, day) => {
+      const dayTimes = eventsDataTimes[day] || [];
+      return getOverlappingColors(dayTimes, hour);
     })
   );
 
@@ -69,7 +170,10 @@ export function insertDataToGraph(screen, table, eventsDataTimes, monday) {
     }
     const prevFilled = hour > 0 && filledCountMatrix[hour - 1][day] > slot;
     const nextFilled = hour < 23 && filledCountMatrix[hour + 1][day] > slot;
-    return prevFilled || nextFilled ? '█' : '■';
+    const block = prevFilled || nextFilled ? '█' : '■';
+    const colors = slotColorMatrix[hour][day] || [];
+    const colorName = colors[slot] || colors[0] || DEFAULT_GRAPH_COLOR;
+    return `{${colorName}-fg}${block}{/${colorName}-fg}`;
   };
 
   const blockChars = (hour, day) => {

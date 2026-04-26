@@ -7,6 +7,8 @@ import {
   setSyncTokenInDatabase,
   ensureDescriptionColumn,
   ensureItemTypeColumn,
+  ensureColorIdColumn,
+  ensureBackgroundColorColumn,
   deleteEventsFromDatabase,
   insertEventsToDatabase,
   fetchEventsFromDatabase,
@@ -20,8 +22,17 @@ import { convertToDateTime } from '../utils/dateUtils.js';
  */
 export async function fetchCalendars(auth) {
   const calendar = google.calendar({ version: 'v3', auth });
-  const res = await calendar.calendarList.list();
-  const calendars = res.data.items;
+  const [res, colorRes] = await Promise.all([calendar.calendarList.list(), calendar.colors.get()]);
+  const colorPalette = colorRes.data?.calendar || {};
+  const calendars = (res.data.items || []).map(item => ({
+    id: item.id,
+    summary: item.summary,
+    colorId: item.colorId || null,
+    backgroundColor:
+      (item.backgroundColor || colorPalette[item.colorId]?.background || null)?.toLowerCase() ||
+      null,
+    syncToken: null,
+  }));
   return calendars;
 }
 
@@ -105,6 +116,10 @@ export async function initializeCalendars(auth) {
   } else {
     await ensureDescriptionColumn();
     await ensureItemTypeColumn();
+    await ensureColorIdColumn();
+    await ensureBackgroundColorColumn();
+    const latestCalendars = await fetchCalendars(auth);
+    await insertCalendarListToDatabase(latestCalendars);
     calendars = await fetchCalendarsFromDatabase();
   }
   return calendars;
