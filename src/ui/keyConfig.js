@@ -47,19 +47,19 @@ export function setupKeyBindings(screen, auth, calendars, events, allEvents, inp
         addEventNL(auth, screen, calendars, events, allEvents));
 
     screen.key(keyBindings.nextWeek || ['n'], () =>
-        jumpCommand(screen, events, allEvents, ['nw']));
+        jumpCommand(screen, events, allEvents, ['nw'], { useFocusedRightEventTable: true }));
 
     screen.key(keyBindings.prevWeek || ['p'], () =>
-        jumpCommand(screen, events, allEvents, ['lw']));
+        jumpCommand(screen, events, allEvents, ['lw'], { useFocusedRightEventTable: true }));
 
     screen.key(keyBindings.nextMonth || ['C-n'], () =>
-        jumpCommand(screen, events, allEvents, ['nm']));
+        jumpCommand(screen, events, allEvents, ['nm'], { useFocusedRightEventTable: true }));
 
     screen.key(keyBindings.prevMonth || ['C-p'], () =>
-        jumpCommand(screen, events, allEvents, ['lm']));
+        jumpCommand(screen, events, allEvents, ['lm'], { useFocusedRightEventTable: true }));
 
     screen.key(keyBindings.today || ['t'], () =>
-        jumpCommand(screen, events, allEvents, []));
+        jumpCommand(screen, events, allEvents, [], { useFocusedRightEventTable: true }));
 
     screen.key(keyBindings.toggleCommandLine || ['space'], () => {
         // lastYearTable にフォーカスがある場合はトップレベルの space を無視
