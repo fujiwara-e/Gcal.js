@@ -1,7 +1,3 @@
-<h1 align="center">
-<img src="./img/logo_transparent.png" alt="TUI" width="250", height="250">
-</h1>
-
 <p align="center">
 <b>TUI</b> <b>Google Calendar<b> Client Application 🧑‍💻👩‍💻👨‍💻
 </p>
@@ -30,6 +26,10 @@
 
 <p align="center">
 <img src="./img/TUI.png" alt="TUI" width="600">
+</p>
+
+<p align="center">
+<img src="./img/Usage.png" alt="Usage" width="600">
 </p>
 
 ## For Japanese
