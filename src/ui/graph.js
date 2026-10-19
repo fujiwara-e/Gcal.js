@@ -1,5 +1,4 @@
 import blessed from 'blessed';
-import contrib from 'blessed-contrib';
 
 const DEFAULT_GRAPH_COLOR = '#2bc4ff';
 const calendarColorById = new Map();

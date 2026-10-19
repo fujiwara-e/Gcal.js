@@ -24,36 +24,31 @@ function restartApplication(screen) {
  * @returns {Promise<boolean>} Whether updates are available
  */
 export async function hasUpdates(isForked, originalRepoUrl = 'github.com/hosokawa-kenshin/Gcal.js') {
-  try {
-    if (isForked) {
-      const { stdout: remotes } = await execPromise('git remote -v');
-      const hasUpstream = remotes.includes('upstream');
+  if (isForked) {
+    const { stdout: remotes } = await execPromise('git remote -v');
+    const hasUpstream = remotes.includes('upstream');
 
-      if (!hasUpstream) {
-        const upstreamUrl = `https://${originalRepoUrl}.git`;
-        await execPromise(`git remote add upstream ${upstreamUrl}`);
-      }
-      await execPromise('git fetch upstream');
-
-      const { stdout: branchOutput } = await execPromise('git branch --show-current');
-      const currentBranch = branchOutput.trim();
-
-      const { stdout: diffOutput } = await execPromise(`git diff HEAD upstream/${currentBranch} --name-only`);
-
-      return diffOutput.trim() !== '';
-    } else {
-      await execPromise('git fetch origin');
-
-      const { stdout: branchOutput } = await execPromise('git branch --show-current');
-      const currentBranch = branchOutput.trim();
-
-      const { stdout: diffOutput } = await execPromise(`git diff HEAD origin/${currentBranch} --name-only`);
-
-      return diffOutput.trim() !== '';
+    if (!hasUpstream) {
+      const upstreamUrl = `https://${originalRepoUrl}.git`;
+      await execPromise(`git remote add upstream ${upstreamUrl}`);
     }
-  } catch (error) {
-    console.error('Error checking for updates:', error.message);
-    return false;
+    await execPromise('git fetch upstream');
+
+    const { stdout: branchOutput } = await execPromise('git branch --show-current');
+    const currentBranch = branchOutput.trim();
+
+    const { stdout: diffOutput } = await execPromise(`git diff HEAD upstream/${currentBranch} --name-only`);
+
+    return diffOutput.trim() !== '';
+  } else {
+    await execPromise('git fetch origin');
+
+    const { stdout: branchOutput } = await execPromise('git branch --show-current');
+    const currentBranch = branchOutput.trim();
+
+    const { stdout: diffOutput } = await execPromise(`git diff HEAD origin/${currentBranch} --name-only`);
+
+    return diffOutput.trim() !== '';
   }
 }
 
@@ -128,11 +123,14 @@ export async function updateRepository(screen, updateBox, originalRepoUrl = 'git
 
   } catch (error) {
     updateBox.setContent(updateBox.getContent() + `Error updating repository: ${error.message}\n`);
-    screen.render();
-    console.error('Detected error:', error.message);
-    if (error.stderr) {
-      console.error('Git error:', error.stderr);
+    const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
+    if (logTable) {
+      logTable.log(`Error updating repository: ${error.message}`);
+      if (error.stderr) {
+        logTable.log(`Git error: ${error.stderr}`);
+      }
     }
+    screen.render();
   }
 }
 

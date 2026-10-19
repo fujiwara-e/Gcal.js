@@ -16,8 +16,6 @@ export async function runApp() {
   console.log('Running app ...');
   const setting = loadSetting();
   const keyBindings = setting.keyBindings;
-  const isForked = await isForkedRepository();
-  const updateAvailable = await hasUpdates(isForked);
   const auth = await authorize();
   const calendars = await initializeCalendars(auth);
   const calendarEvents = await initializeEvents(auth, calendars);
@@ -38,14 +36,6 @@ export async function runApp() {
 
   // 去年パネル検索用のサブミットハンドラー（null = 通常の handleInput）
   let lastYearSubmitHandler = null;
-
-  if (updateAvailable) {
-    logTable.log(
-      '{blue-fg}Update available! Please run update command to update the app.{/blue-fg}'
-    );
-  } else {
-    logTable.log('{blue-fg}You are using the latest version of the app.{/blue-fg}');
-  }
 
   if (taskSetupRequired) {
     showTaskSetupNotice(logTable);
@@ -128,4 +118,27 @@ export async function runApp() {
   setupKeyBindings(screen, auth, calendars, events, allEvents, inputBox, setting);
 
   screen.render();
+
+  // Update checks must not delay the initial display or input setup.
+  void checkForUpdates(screen, logTable);
+}
+
+async function checkForUpdates(screen, logTable) {
+  try {
+    const isForked = await isForkedRepository();
+    if (screen.destroyed) return;
+    const updateAvailable = await hasUpdates(isForked);
+    if (screen.destroyed) return;
+
+    logTable.log(
+      updateAvailable
+        ? '{blue-fg}Update available! Please run update command to update the app.{/blue-fg}'
+        : '{blue-fg}You are using the latest version of the app.{/blue-fg}'
+    );
+    screen.render();
+  } catch (_err) {
+    if (screen.destroyed) return;
+    logTable.log('{yellow-fg}Unable to check for updates.{/yellow-fg}');
+    screen.render();
+  }
 }

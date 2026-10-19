@@ -1,7 +1,5 @@
-import contrib from 'blessed-contrib';
 import blessed from 'blessed';
 
-import { setupVimKeysForNavigation } from './keyConfig.js';
 import { splitDateTimeIntoDateAndTime } from '../utils/dateUtils.js';
 
 export function createLogTable(screen) {
@@ -20,30 +18,6 @@ export function createLogTable(screen) {
   });
   screen.append(logTable);
   return (logTable);;
-}
-
-export function createRightTable(screen) {
-  const rightTable = contrib.table({
-    keys: true,
-    fg: 'white',
-    selectedFg: 'white',
-    selectedBg: 'blue',
-    interactive: true,
-    label: 'Events summary',
-    top: 0,
-    left: '50%',
-    width: '50%',
-    height: '100%',
-    border: { type: 'line', fg: 'cyan' },
-    columnSpacing: 1,
-    columnWidth: [20, 20, 50],
-    style: {
-      header: { bold: true },
-    }
-  });
-  screen.append(rightTable);
-  setupVimKeysForNavigation(rightTable.rows, screen, null, null);
-  return rightTable;
 }
 
 export function createLeftTable(screen) {
