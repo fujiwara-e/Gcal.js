@@ -359,6 +359,5 @@ export function createLayout(calendars, events) {
     inputBox.focus();
     screen.render();
   });
-  console.log('Create Layout');
   return { screen, inputBox, keypressListener, lastYearTable };
 }
