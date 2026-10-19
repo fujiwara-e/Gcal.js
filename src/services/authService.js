@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 import http from 'http';
 import path from 'path';
 import open from 'open';
-import { google } from 'googleapis';
+import { googleAuth } from './googleApi.js';
 
 // If modifying these scopes, delete token.json.
 const SCOPES = [
@@ -28,7 +28,7 @@ export async function loadSavedCredentialsIfExist() {
   try {
     const content = await fs.readFile(TOKEN_PATH);
     const credentials = JSON.parse(content);
-    return google.auth.fromJSON(credentials);
+    return googleAuth.fromJSON(credentials);
   } catch (err) {
     return null;
   }
@@ -84,7 +84,7 @@ async function authenticateWithConsent() {
     throw new Error("The OAuth redirect URI must point to localhost.");
   }
 
-  const client = new google.auth.OAuth2(
+  const client = new googleAuth.OAuth2(
     key.client_id,
     key.client_secret
   );

@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { createCalendarClient } from '../services/googleApi.js';
 import { updateTable } from '../ui/tableUpdater.js';
 import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayFormatter.js';
 import { createAddForm, createTaskForm } from '../ui/form.js';
@@ -49,7 +49,7 @@ export function editEvent(
     '他のイベントを参照して選択日にコピー',
   ];
   const taskEditItems = ['Task の完了状態を切り替え', 'Task を削除'];
-  const calendar = google.calendar({ version: 'v3', auth });
+  const calendar = createCalendarClient({ version: 'v3', auth });
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
@@ -715,7 +715,7 @@ export async function copyEventToDate(
   events,
   allEvents
 ) {
-  const calendar = google.calendar({ version: 'v3', auth });
+  const calendar = createCalendarClient({ version: 'v3', auth });
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');

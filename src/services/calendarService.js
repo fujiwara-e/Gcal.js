@@ -1,6 +1,6 @@
 import Event from '../models/event.js';
 import fs2 from 'fs';
-import { google } from 'googleapis';
+import { createCalendarClient } from './googleApi.js';
 import {
   insertCalendarListToDatabase,
   fetchCalendarsFromDatabase,
@@ -21,7 +21,7 @@ import { convertToDateTime } from '../utils/dateUtils.js';
  * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
  */
 export async function fetchCalendars(auth) {
-  const calendar = google.calendar({ version: 'v3', auth });
+  const calendar = createCalendarClient({ version: 'v3', auth });
   const [res, colorRes] = await Promise.all([calendar.calendarList.list(), calendar.colors.get()]);
   const colorPalette = colorRes.data?.calendar || {};
   const calendars = (res.data.items || []).map(item => ({
@@ -95,7 +95,7 @@ export async function fetchEventFromCalendar(client, calendar) {
  * @return {Promise<Array[Event]>} List of events.
  */
 export async function fetchEvents(auth, calendars) {
-  const client = google.calendar({ version: 'v3', auth });
+  const client = createCalendarClient({ version: 'v3', auth });
   const fetchPromises = [];
   for (const calendar of calendars) {
     fetchPromises.push(fetchEventFromCalendar(client, calendar));
