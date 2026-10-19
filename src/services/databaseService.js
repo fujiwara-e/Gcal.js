@@ -2,7 +2,6 @@ import sqlite3 from 'sqlite3';
 import { Calendar } from '../models/calendar.js';
 import { Event } from '../models/event.js';
 import Task from '../models/task.js';
-import { calendar } from 'googleapis/build/src/apis/calendar/index.js';
 
 export async function mergeDuplicateEvents() {
   const db = new sqlite3.Database('./db/Gcal.db');

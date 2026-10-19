@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { createTasksClient as createTasksApi } from './googleApi.js';
 import Task from '../models/task.js';
 import {
   replaceTasksInDatabase,
@@ -6,7 +6,7 @@ import {
 } from './databaseService.js';
 
 function createTasksClient(auth) {
-  return google.tasks({ version: 'v1', auth });
+  return createTasksApi({ version: 'v1', auth });
 }
 
 export async function fetchTaskLists(auth) {

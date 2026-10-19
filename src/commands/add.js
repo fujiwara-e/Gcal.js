@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { createCalendarClient } from '../services/googleApi.js';
 import { updateTable } from '../ui/tableUpdater.js';
 import { convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
@@ -7,7 +7,7 @@ import os from 'os';
 import fs from 'fs';
 
 export function addEvent(auth, screen, calendars, events, allEvents) {
-  const calendar = google.calendar({ version: 'v3', auth });
+  const calendar = createCalendarClient({ version: 'v3', auth });
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const inputBox = screen.children.find(child => child.options.label === 'Commandline');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
