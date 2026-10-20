@@ -208,38 +208,85 @@ export async function deleteEventsFromDatabase(events) {
   }
 }
 
-export async function insertCalendarListToDatabase(calendars) {
+export async function hasCalendarListCache() {
   const db = new sqlite3.Database('./db/Gcal.db');
-  await runQuery(
-    db,
-    'CREATE TABLE IF NOT EXISTS Calendars (id TEXT PRIMARY KEY, summary TEXT, description TEXT, subscription BOOLEAN DEFAULT 1, syncToken TEXT DEFAULT NULL, colorId TEXT, backgroundColor TEXT)'
-  );
-  await ensureColorIdColumn();
-  await ensureBackgroundColorColumn();
-  for (const calendar of calendars) {
+  try {
+    const tables = await allQuery(db, "SELECT name FROM sqlite_master WHERE type = 'table'");
+    if (!tables.some(table => table.name === 'Calendars')) return false;
+    const [{ count }] = await allQuery(db, 'SELECT COUNT(*) AS count FROM Calendars');
+    // Legacy caches remain valid even when all calendars are unchecked.
+    if (count > 0) return true;
+    if (!tables.some(table => table.name === 'AppMetadata')) return false;
+    const rows = await allQuery(
+      db,
+      "SELECT value FROM AppMetadata WHERE key = 'calendarListFetched'"
+    );
+    return rows[0]?.value === 'true';
+  } finally {
+    await closeDatabase(db);
+  }
+}
+
+function closeDatabase(db) {
+  return new Promise((resolve, reject) => {
+    db.close(err => err ? reject(err) : resolve());
+  });
+}
+
+export async function insertCalendarListToDatabase(
+  calendars,
+  { replaceMissing = false, defaultSubscription = true } = {}
+) {
+  const db = new sqlite3.Database('./db/Gcal.db');
+  let transactionOpen = false;
+  try {
     await runQuery(
       db,
-      'INSERT INTO Calendars (id, summary, subscription, syncToken, colorId, backgroundColor) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, colorId = excluded.colorId, backgroundColor = excluded.backgroundColor',
-      [
-        calendar.id,
-        calendar.summary,
-        true,
-        calendar.syncToken || null,
-        calendar.colorId || null,
-        calendar.backgroundColor || null,
-      ]
+      'CREATE TABLE IF NOT EXISTS Calendars (id TEXT PRIMARY KEY, summary TEXT, description TEXT, subscription BOOLEAN DEFAULT 1, syncToken TEXT DEFAULT NULL, colorId TEXT, backgroundColor TEXT)'
     );
-  }
-  await new Promise((resolve, reject) => {
-    db.close(err => {
-      if (err) {
-        console.error('Error closing database:', err.message);
-        reject(err);
+    await ensureColorIdColumn();
+    await ensureBackgroundColorColumn();
+    await runQuery(db, 'BEGIN IMMEDIATE');
+    transactionOpen = true;
+    for (const calendar of calendars) {
+      await runQuery(
+        db,
+        'INSERT INTO Calendars (id, summary, subscription, syncToken, colorId, backgroundColor) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, colorId = excluded.colorId, backgroundColor = excluded.backgroundColor',
+        [
+          calendar.id,
+          calendar.summary,
+          defaultSubscription,
+          calendar.syncToken || null,
+          calendar.colorId || null,
+          calendar.backgroundColor || null,
+        ]
+      );
+    }
+    if (replaceMissing) {
+      if (calendars.length > 0) {
+        const placeholders = calendars.map(() => '?').join(',');
+        await runQuery(
+          db,
+          `DELETE FROM Calendars WHERE id NOT IN (${placeholders})`,
+          calendars.map(calendar => calendar.id)
+        );
       } else {
-        resolve();
+        await runQuery(db, 'DELETE FROM Calendars');
       }
-    });
-  });
+      await runQuery(db, 'CREATE TABLE IF NOT EXISTS AppMetadata (key TEXT PRIMARY KEY, value TEXT)');
+      await runQuery(
+        db,
+        "INSERT OR REPLACE INTO AppMetadata (key, value) VALUES ('calendarListFetched', 'true')"
+      );
+    }
+    await runQuery(db, 'COMMIT');
+    transactionOpen = false;
+  } catch (err) {
+    if (transactionOpen) await runQuery(db, 'ROLLBACK');
+    throw err;
+  } finally {
+    await closeDatabase(db);
+  }
 }
 
 export async function insertEventsToDatabase(events) {
@@ -306,6 +353,7 @@ export async function insertEventsToDatabase(events) {
 }
 
 export async function fetchEventsFromDatabase(calendars) {
+  if (calendars.length === 0) return [];
   const db = new sqlite3.Database('./db/Gcal.db');
   const events = [];
   await runQuery(
@@ -332,7 +380,7 @@ export async function fetchEventsFromDatabase(calendars) {
                 row.summary,
                 row.description,
                 row.calendarId,
-                row.calendarName,
+                calendar.summary,
                 row.itemType || 'event'
               )
             );
