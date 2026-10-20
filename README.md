@@ -34,7 +34,7 @@
 
 ## For Japanese
 
-[日本語版README](https://github.com/hosokawa-kenshin/Gcal.js/blob/main/README-ja.md)
+[日本語版README](README-ja.md)
 
 ## Requirements
 
@@ -82,13 +82,13 @@ ln -s ~/git/Gcal.js/cldr cldr
 
 ### Display
 
-When you start Gcal.js, three tables are displayed.  
-On the left are the events registered in Google Calendar and dated Google Tasks, on the upper right is a graph showing the dates and times of events, and on the lower right is a log.  
+When you start Gcal.js, three tables are displayed.
+On the left are the events registered in Google Calendar and dated Google Tasks, on the upper right is a graph showing the dates and times of events, and on the lower right is a log.
 The event under the cursor is highlighted in blue.
 
 ### Basic operations
 
-Use the arrow keys or `jk` keys (like vim) to move the cursor.  
+Use the arrow keys or `jk` keys (like vim) to move the cursor.
 Press the `q` key to exit the system.
 To select an event, place the cursor on the event you want to select and press the `Enter` key.
 Press the `Space` key to open the command line.
@@ -133,8 +133,8 @@ Please refer to the following for operation methods, specifications, and details
 
 ## Shortcuts
 
-Some functions and commands have shortcuts.  
-You can also assign your own preferred keys.  
+Some functions and commands have shortcuts.
+You can also assign your own preferred keys.
 The default key bindings are shown below.
 
 | Key               | Description                              |
@@ -149,7 +149,7 @@ The default key bindings are shown below.
 | `Ctrl + p`        | Jump to the previous month               |
 | `t`               | Jump to today                            |
 
-Set your key bindings:  
+Set your key bindings:
 Edit setting.json, key bindings can be changed.
 
 ```
