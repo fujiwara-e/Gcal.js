@@ -10,7 +10,7 @@ function ensureSettingExists() {
             const defaultKeyBindings = getDefaultKeyBindings();
             fs.writeFileSync(
                 settingPath,
-                JSON.stringify({ keyBindings: defaultKeyBindings }, null, 2)
+                JSON.stringify({ tasksEnabled: false, keyBindings: defaultKeyBindings }, null, 2)
             );
         }
     } catch (error) {
@@ -24,6 +24,7 @@ export function loadSetting() {
     try {
         const settingData = fs.readFileSync(settingPath, 'utf8');
         const userSetting = JSON.parse(settingData);
+        userSetting.tasksEnabled = userSetting.tasksEnabled === true;
 
         if (!userSetting.keyBindings) {
             userSetting.keyBindings = getDefaultKeyBindings();
@@ -32,7 +33,7 @@ export function loadSetting() {
         return userSetting;
     } catch (error) {
         console.error('Error loading setting, using defaults:', error);
-        return { keyBindings: getDefaultKeyBindings() };
+        return { tasksEnabled: false, keyBindings: getDefaultKeyBindings() };
     }
 }
 

@@ -39,7 +39,7 @@
 ## Requirements
 
 - Node.js
-- Google Calendar API and Google Tasks API must be enabled in the Google Cloud Console
+- Google Calendar API must be enabled in the Google Cloud Console (Google Tasks API is optional)
 - `credentials.json` file must be obtained from the Google Cloud Console and placed in the program directory
   - For detailed setup instructions, see [Google Calendar API Credentials Setup Guide](./docs/oauth-en.md)
 
@@ -55,10 +55,23 @@ npm install
 
 ### Set up Google Calendar API / Google Tasks API credentials
 
-1. Create a project in Google Cloud Console and enable the Google Calendar API and Google Tasks API
+1. Create a project in Google Cloud Console and enable the Google Calendar API
 2. Create credentials and generate an OAuth 2.0 client ID
 3. Download the credentials.json file and save it to the same directory as this program
-4. If `token.json` already exists, delete it and re-authorize so the new Tasks scope is granted
+
+### Enable Google Tasks (optional)
+
+Google Tasks is **off by default**, including when `tasksEnabled` is missing from an existing configuration.
+To enable it, add `"tasksEnabled": true` at the top level of `setting.json`, keeping your existing settings, and restart the app:
+
+```json
+{
+  "tasksEnabled": true
+}
+```
+
+Enable the Google Tasks API in your Google Cloud project as well. If your existing token does not have Tasks permission, delete `token.json` and restart to authorize again.
+Set `tasksEnabled` to `false` and restart to disable task synchronization, display, and task actions. Cached tasks are kept in the database. New authorization requests Tasks permission only when this feature is enabled.
 
 ### Create a symlink
 
@@ -83,7 +96,7 @@ ln -s ~/git/Gcal.js/cldr cldr
 ### Display
 
 When you start Gcal.js, three tables are displayed.
-On the left are the events registered in Google Calendar and dated Google Tasks, on the upper right is a graph showing the dates and times of events, and on the lower right is a log.
+On the left are the events registered in Google Calendar and, when enabled, dated Google Tasks. On the upper right is a graph showing the dates and times of events, and on the lower right is a log.
 The event under the cursor is highlighted in blue.
 
 ### Basic operations

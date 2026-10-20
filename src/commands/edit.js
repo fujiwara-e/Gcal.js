@@ -11,6 +11,7 @@ import {
 } from '../services/taskService.js';
 import path from 'path';
 import os from 'os';
+import { loadSetting } from '../services/settingService.js';
 import { openExternalEditor } from '../utils/editor.js';
 import {
   applyDetailsToForm,
@@ -40,24 +41,33 @@ export function editEvent(
   selectedDate = null,
   copyTargetDate = null
 ) {
-  const defaultEditItems = [
-    '選択日にイベントを追加',
-    '選択日にタスクを追加',
-    'イベントを編集',
-    'イベントをコピー',
-    'イベントを削除',
-    '他のイベントを参照して選択日にコピー',
+  const tasksEnabled = loadSetting().tasksEnabled;
+  const editActions = [
+    { action: 'addEvent', label: '選択日にイベントを追加' },
+    ...(tasksEnabled ? [{ action: 'addTask', label: '選択日にタスクを追加' }] : []),
+    { action: 'editEvent', label: 'イベントを編集' },
+    { action: 'copyEvent', label: 'イベントをコピー' },
+    { action: 'deleteEvent', label: 'イベントを削除' },
+    { action: 'copyOtherEvent', label: '他のイベントを参照して選択日にコピー' },
   ];
+  const defaultEditItems = editActions.map(item => item.label);
   const taskEditItems = ['Task の完了状態を切り替え', 'Task を削除'];
   const calendar = createCalendarClient({ version: 'v3', auth });
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
+  if (!tasksEnabled && selectedEvent?.isTask && selectedEvent.isTask()) {
+    logTable.log('Google Tasks is disabled. Set tasksEnabled to true in setting.json and restart.');
+    screen.render();
+    return;
+  }
   const eventTable = screen.children.find(child => child.options.label === 'Current Events');
   const editCommandList = screen.children.find(child => child.options.label === 'Edit List');
   const eventDetailTable = screen.children.find(child => child.options.label === 'Event Details');
   const { formBox, formFields } = createAddForm(screen);
-  const { formBox: taskFormBox, formFields: taskFormFields } = createTaskForm(screen);
+  const { formBox: taskFormBox, formFields: taskFormFields } = tasksEnabled
+    ? createTaskForm(screen)
+    : { formBox: null, formFields: null };
   const tempFilePath = path.join(os.tmpdir(), 'blessed-editor.txt');
   const taskTempFilePath = path.join(os.tmpdir(), 'blessed-task-editor.txt');
   const selectedCalendarId = selectedEvent?.calendarId ?? null;
@@ -389,8 +399,8 @@ export function editEvent(
       });
     };
 
-    switch (index) {
-      case 0:
+    switch (editActions[index]?.action) {
+      case 'addEvent':
         promptCalendarSelection(async (selectedEditCalendar, selectedEditCalendarId) => {
           const baseValues = eventToFormValues(selectedEvent, fallbackDate);
           const initialValues = {
@@ -440,7 +450,7 @@ export function editEvent(
         });
         break;
 
-      case 1:
+      case 'addTask':
         promptTaskListSelection(async selectedTaskList => {
           const initialValues = {
             title: '',
@@ -468,7 +478,7 @@ export function editEvent(
         });
         break;
 
-      case 2:
+      case 'editEvent':
         promptCalendarSelection(async (selectedEditCalendar, selectedEditCalendarId) => {
           if (!selectedEvent || !selectedCalendarId || !selectedEventsId) {
             logTable.log('Error: No event selected to move.');
@@ -532,7 +542,7 @@ export function editEvent(
         });
         break;
 
-      case 3:
+      case 'copyEvent':
         promptCalendarSelection(async (selectedEditCalendar, selectedEditCalendarId) => {
           const initialValues = eventToFormValues(selectedEvent, fallbackDate);
           if (copyTargetDate) {
@@ -581,7 +591,7 @@ export function editEvent(
         });
         break;
 
-      case 4:
+      case 'deleteEvent':
         editCommandList.hide();
         if (!selectedEvent || !selectedCalendarId || !selectedEventsId) {
           logTable.log('Error: No event selected to delete.');
@@ -608,7 +618,7 @@ export function editEvent(
         );
         break;
 
-      case 5: {
+      case 'copyOtherEvent': {
         screen.append(eventTable);
         eventTable.show();
         editCommandList.hide();

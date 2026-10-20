@@ -1,11 +1,19 @@
 import { updateTable } from '../ui/tableUpdater.js';
 import { mergeDuplicateEvents } from '../services/databaseService.js';
+import { loadSetting } from '../services/settingService.js';
 
-export function syncCommand(auth, screen, calendars, events, allEvents, keypressListener) {
+export async function syncCommand(auth, screen, calendars, events, allEvents, keypressListener) {
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
   leftTable.on('keypress', keypressListener);
-  updateTable(auth, leftTable, calendars, events, allEvents);
-  mergeDuplicateEvents();
-  logTable.log('Synced with Google Calendar and Tasks!');
+  try {
+    await updateTable(auth, leftTable, calendars, events, allEvents);
+    await mergeDuplicateEvents();
+    logTable.log(loadSetting().tasksEnabled
+      ? 'Synced with Google Calendar and Tasks!'
+      : 'Synced with Google Calendar!');
+  } catch (_err) {
+    logTable.log('Error: Failed to sync.');
+  }
+  screen.render();
 }

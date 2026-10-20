@@ -1,0 +1,27 @@
+#!/bin/bash
+cmdpath=$(readlink $0 -f || echo $0)
+cd $(dirname $cmdpath)
+
+first=$1
+second=$2
+third=$3
+
+if [ -z "$first" ] && [ -z "$second" ]; then
+  node bin/index.js
+elif [ $first == "list" ]; then
+  node bin/index.js list
+elif [ $first == "nm" ] && [ $second ]; then
+  node bin/index.js nm $second
+elif [ $first == "nm" ] && [ -z "$second" ]; then
+  node bin/index.js nm
+elif [ $first == "add" ]; then
+  node bin/index.js add
+elif [ $first == "rm" ]; then
+  node bin/index.js rm
+elif [ $first == "delete" ]; then
+  node bin/index.js delete
+elif [ $first == "md" ]; then
+  node bin/index.js md $second $third
+else
+  node bin/index.js $first $second
+fi
