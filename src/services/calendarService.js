@@ -4,11 +4,10 @@ import { createCalendarClient } from './googleApi.js';
 import {
   insertCalendarListToDatabase,
   fetchCalendarsFromDatabase,
+  hasCalendarListCache,
   setSyncTokenInDatabase,
   ensureDescriptionColumn,
   ensureItemTypeColumn,
-  ensureColorIdColumn,
-  ensureBackgroundColorColumn,
   deleteEventsFromDatabase,
   insertEventsToDatabase,
   fetchEventsFromDatabase,
@@ -23,8 +22,15 @@ import { convertToDateTime } from '../utils/dateUtils.js';
 export async function fetchCalendars(auth) {
   const calendar = createCalendarClient({ version: 'v3', auth });
   const [res, colorRes] = await Promise.all([calendar.calendarList.list(), calendar.colors.get()]);
+  const items = [...(res.data.items || [])];
+  let pageToken = res.data.nextPageToken;
+  while (pageToken) {
+    const page = await calendar.calendarList.list({ pageToken });
+    items.push(...(page.data.items || []));
+    pageToken = page.data.nextPageToken;
+  }
   const colorPalette = colorRes.data?.calendar || {};
-  const calendars = (res.data.items || []).map(item => ({
+  const calendars = items.map(item => ({
     id: item.id,
     summary: item.summary,
     colorId: item.colorId || null,
@@ -105,24 +111,26 @@ export async function fetchEvents(auth, calendars) {
   return events.flat();
 }
 
+export async function refreshCalendarList(auth, { subscribeNewCalendars = false } = {}) {
+  const calendars = await fetchCalendars(auth);
+  await insertCalendarListToDatabase(calendars, {
+    replaceMissing: true,
+    defaultSubscription: subscribeNewCalendars,
+  });
+  return calendars;
+}
+
 export async function initializeCalendars(auth) {
-  const dbPath = './db/Gcal.db';
-  var calendars = [];
-  if (!fs2.existsSync(dbPath)) {
-    console.log('Database file does not exist. Creating a new database...');
-    calendars = await fetchCalendars(auth);
-    await insertCalendarListToDatabase(calendars);
-    calendars = await fetchCalendarsFromDatabase();
+  const hasCache = fs2.existsSync('./db/Gcal.db') && (await hasCalendarListCache());
+  if (!hasCache) {
+    await refreshCalendarList(auth, { subscribeNewCalendars: true });
   } else {
+    // A previous first run may have saved the list before creating Events.
+    await insertEventsToDatabase([]);
     await ensureDescriptionColumn();
     await ensureItemTypeColumn();
-    await ensureColorIdColumn();
-    await ensureBackgroundColorColumn();
-    const latestCalendars = await fetchCalendars(auth);
-    await insertCalendarListToDatabase(latestCalendars);
-    calendars = await fetchCalendarsFromDatabase();
   }
-  return calendars;
+  return fetchCalendarsFromDatabase();
 }
 
 export async function initializeEvents(auth, calendars) {
