@@ -1,4 +1,5 @@
 {
+    "tasksEnabled": false,
     "keyBindings": {
         "quit": [
             "q",

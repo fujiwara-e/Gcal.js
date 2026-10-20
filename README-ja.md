@@ -33,35 +33,52 @@
 </p>
 
 ## Requirements
+
 - Node.js
-- Google Cloud ConsoleでGoogle Calendar APIとGoogle Tasks APIが有効になっていること
+- Google Cloud ConsoleでGoogle Calendar APIが有効になっていること（Google Tasks APIは任意）
 - credentials.jsonファイルがGoogle Cloud Consoleから取得され，プログラムのディレクトリに配置されていること
   - 詳細な設定手順については，[Google Calendar API 認証情報設定手順](./docs/oauth-ja.md)を参照
 
 ## Setup
+
 ### 依存パッケージのインストール
 
 プロジェクトディレクトリで下記のコマンドを実行し，必要な依存パッケージをインストールする．
-``` bash
+
+```bash
 npm install
 ```
 
 ### Google Calendar API / Google Tasks APIの認証情報を設定
 
-1. Google Cloud Consoleでプロジェクトを作成し，Google Calendar APIとGoogle Tasks APIを有効化する
+1. Google Cloud Consoleでプロジェクトを作成し，Google Calendar APIを有効化する
 2. 認証情報を作成し，OAuth 2.0クライアントIDを生成する
 3. credentials.jsonファイルをダウンロードし，このプログラムと同じディレクトリに保存する
-4. 既に `token.json` がある場合は削除して再認証する（Tasks 権限追加のため）
+
+### Google Tasksを有効にする（任意）
+
+Google Tasksは**デフォルトOFF**．既存の設定で `tasksEnabled` が未指定の場合もOFFになる．
+利用する場合は，既存の設定を残したまま `setting.json` の最上位に `"tasksEnabled": true` を追加し，アプリを再起動する．
+
+```json
+{
+  "tasksEnabled": true
+}
+```
+
+Google CloudのプロジェクトでGoogle Tasks APIも有効化する．既存のトークンにTasks権限がない場合は，`token.json` を削除して再起動し，再認証する．
+`tasksEnabled` を `false` にして再起動すると，タスクの同期・表示・操作が無効になる．DB内の保存済みタスクは削除しない．新規認証時のTasks権限は，機能がONの場合だけ要求する．
 
 ### コマンドのパスを設定
 
 パスを通した任意のディレクトリ内に Gcal.js の実行ファイル (cldr) へのシンボリックリンクを作成する
 
-``` bash
+```bash
 export PATH=path/to/your/directory:$PATH
 cd your/directory
 ln -s path/to/Gcal.js/cldr cldr
 ```
+
 以下に設定例を示す
 
 ```bash
@@ -71,19 +88,24 @@ ln -s ~/git/Gcal.js/cldr cldr
 ```
 
 ## Usage
+
 ### 表示について
-Gcal.js を起動すると，3つのテーブルが表示される．  
-左には Google Calendar の予定と Google Tasks の期限付きタスク，右上には予定が入っている日時を示すグラフ，右下にはログが表示される．  
+
+Gcal.js を起動すると，3つのテーブルが表示される．
+左には Google Calendar の予定（タスク機能ONの場合は Google Tasks の期限付きタスクも），右上には予定が入っている日時を示すグラフ，右下にはログが表示される．
 カーソルが当たっている予定は，青色にハイライトされる．
 
 ### 基本操作
-カーソルの移動には，矢印キーか `jk` キー (like vim) を用いる．  
+
+カーソルの移動には，矢印キーか `jk` キー (like vim) を用いる．
 システムの終了は `q` キーを押す
 イベントの選択は，選択したいイベントにカーソルを当て `Enter` キーを押す．
 コマンドラインを開くには `Space` キーを押す．
 
 ### 予定の追加・編集・削除機能および使用できるコマンド
+
 それぞれの操作方法や，仕様，詳細については以下を参照．
+
 - [予定の追加](https://github.com/hosokawa-kenshin/Gcal.js/blob/main/docs/cmd/add.md) (2025/6/27 LLM を用いた予定の追加方法について加筆)
 
 - [予定の編集](https://github.com/hosokawa-kenshin/Gcal.js/blob/main/docs/cmd/edit.md)
@@ -107,8 +129,9 @@ Gcal.js を起動すると，3つのテーブルが表示される．
 - [フルスクリーン表示](https://github.com/hosokawa-kenshin/Gcal.js/blob/main/docs/cmd/toggle.md)
 
 ## Shortcuts
-一部の機能やコマンドには，ショートカットが存在する．  
-また，自身の好みのキーを割り当てることも可能である．  
+
+一部の機能やコマンドには，ショートカットが存在する．
+また，自身の好みのキーを割り当てることも可能である．
 以下にデフォルトのキーバインドを示す．
 
 | キー              | 説明                              |
@@ -124,6 +147,7 @@ Gcal.js を起動すると，3つのテーブルが表示される．
 | `t`               | カーソルを本日へ移動              |
 
 独自キーバインドの設定は `setting.json` を書き換える．
+
 ```
 {
     "keyBindings": {
@@ -141,6 +165,7 @@ Gcal.js を起動すると，3つのテーブルが表示される．
     }
 }
 ```
+
 ## License
 
 このプロジェクトはMITライセンスの下でライセンスされている．

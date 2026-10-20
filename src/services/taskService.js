@@ -1,11 +1,15 @@
 import { createTasksClient as createTasksApi } from './googleApi.js';
 import Task from '../models/task.js';
+import { loadSetting } from './settingService.js';
 import {
   replaceTasksInDatabase,
   fetchTasksFromDatabase,
 } from './databaseService.js';
 
 function createTasksClient(auth) {
+  if (!loadSetting().tasksEnabled) {
+    throw new Error('Google Tasks is disabled. Set tasksEnabled to true in setting.json and restart.');
+  }
   return createTasksApi({ version: 'v1', auth });
 }
 

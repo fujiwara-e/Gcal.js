@@ -7,11 +7,11 @@ import http from 'http';
 import path from 'path';
 import open from 'open';
 import { googleAuth } from './googleApi.js';
+import { loadSetting } from './settingService.js';
 
 // If modifying these scopes, delete token.json.
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/tasks',
 ];
 
 // The file token.json stores the user's access and refresh tokens, and is
@@ -57,20 +57,24 @@ export async function saveCredentials(client) {
  * Load or request or authorization to call APIs.
  *
  */
-export async function authorize() {
+export async function authorize(setting = loadSetting()) {
   let client = await loadSavedCredentialsIfExist();
   if (client) {
     return client;
   }
 
-  client = await authenticateWithConsent();
+  client = await authenticateWithConsent(setting);
   if (client.credentials) {
     await saveCredentials(client);
   }
   return client;
 }
 
-async function authenticateWithConsent() {
+async function authenticateWithConsent(setting) {
+  const scopes = [...SCOPES];
+  if (setting.tasksEnabled === true) {
+    scopes.push('https://www.googleapis.com/auth/tasks');
+  }
   const content = await fs.readFile(CREDENTIALS_PATH);
   const keys = JSON.parse(content);
   const key = keys.installed || keys.web;
@@ -143,7 +147,7 @@ async function authenticateWithConsent() {
         access_type: 'offline',
         prompt: 'consent',
         include_granted_scopes: true,
-        scope: SCOPES.join(' '),
+        scope: scopes.join(' '),
       });
 
       open(authorizeUrl, { wait: false }).then(cp => cp.unref());

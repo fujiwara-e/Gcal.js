@@ -15,6 +15,7 @@ import { groupEventsByDate, formatDisplayItems } from './displayFormatter.js';
 import { insertDataToGraph } from './graph.js';
 import { filterDisplayableItems, sortItemsByStart } from '../utils/itemUtils.js';
 import { showTaskSetupNotice } from '../utils/taskNotice.js';
+import { loadSetting } from '../services/settingService.js';
 
 /**
  * グラフを更新（新しいdisplayItems構造に対応）
@@ -71,13 +72,16 @@ export function updateGraph(screen, rightGraph, index, events, displayItems = nu
 }
 
 export async function updateTable(auth, table, calendars, events, allEvents) {
+  const tasksEnabled = loadSetting().tasksEnabled;
   const newEvents = await fetchEvents(auth, calendars);
   let newTasks = null;
-  try {
-    newTasks = await fetchTasks(auth);
-  } catch (_err) {
-    const logTable = table.screen.children.find(child => child.options.label === 'Gcal.js Log');
-    showTaskSetupNotice(logTable);
+  if (tasksEnabled) {
+    try {
+      newTasks = await fetchTasks(auth);
+    } catch (_err) {
+      const logTable = table.screen.children.find(child => child.options.label === 'Gcal.js Log');
+      showTaskSetupNotice(logTable);
+    }
   }
   await insertEventsToDatabase(newEvents);
   if (newTasks) {
@@ -85,7 +89,7 @@ export async function updateTable(auth, table, calendars, events, allEvents) {
   }
   allEvents.length = 0;
   const fetchedEvent = await fetchEventsFromDatabase(calendars);
-  const fetchedTasks = await fetchTasksFromDatabase();
+  const fetchedTasks = tasksEnabled ? await fetchTasksFromDatabase() : [];
   allEvents.push(...sortItemsByStart([...fetchedEvent, ...fetchedTasks.filter(task => task.due)]));
   events.length = 0;
   events.push(...filterDisplayableItems([...allEvents], new Date()));

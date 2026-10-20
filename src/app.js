@@ -16,15 +16,17 @@ export async function runApp() {
   console.log('Running app ...');
   const setting = loadSetting();
   const keyBindings = setting.keyBindings;
-  const auth = await authorize();
+  const auth = await authorize(setting);
   const calendars = await initializeCalendars(auth);
   const calendarEvents = await initializeEvents(auth, calendars);
   let taskSetupRequired = false;
   let tasks = [];
-  try {
-    tasks = await initializeTasks(auth);
-  } catch (_err) {
-    taskSetupRequired = true;
+  if (setting.tasksEnabled) {
+    try {
+      tasks = await initializeTasks(auth);
+    } catch (_err) {
+      taskSetupRequired = true;
+    }
   }
   var allEvents = sortItemsByStart([...calendarEvents, ...tasks.filter(task => task.due)]);
   var events = filterDisplayableItems([...allEvents], new Date());
