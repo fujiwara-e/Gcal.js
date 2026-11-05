@@ -494,49 +494,81 @@ export function editEvent(
             openEditorImmediately: true,
           });
 
+          let saving = false;
+          let saved = false;
+          const sameCalendar = selectedCalendarId === selectedEditCalendarId;
+
           setupSaveShortcut({
             formBox,
             formFields,
             options: {},
             handler: async values => {
+              if (saving || saved) {
+                return;
+              }
+
               if (!validateFormValues(values)) {
                 showValidationError();
                 return;
               }
 
-              const eventResource = buildCalendarEventResource(values);
+              saving = true;
+              let message = sameCalendar
+                ? 'Event successfully updated!'
+                : 'Event successfully moved!';
 
-              calendar.events.delete(
-                {
-                  calendarId: selectedCalendarId,
-                  eventId: selectedEventsId,
-                },
-                err => {
-                  if (err) {
+              try {
+                const eventResource = buildCalendarEventResource(values);
+                if (sameCalendar) {
+                  await calendar.events.patch({
+                    calendarId: selectedCalendarId,
+                    eventId: selectedEventsId,
+                    resource: eventResource,
+                  });
+                  saved = true;
+                } else {
+                  // Keep the original until the destination has accepted the edited event.
+                  await calendar.events.insert({
+                    calendarId: selectedEditCalendarId,
+                    resource: eventResource,
+                  });
+                  saved = true;
+
+                  try {
+                    await calendar.events.delete({
+                      calendarId: selectedCalendarId,
+                      eventId: selectedEventsId,
+                    });
+                  } catch (err) {
                     console.error('The API returned an error: ' + err);
-                    logTable.log('Error: Failed to delete original event.');
-                    screen.render();
-                    return;
+                    // A failed response may follow a successful deletion. Keep the saved copy.
+                    message =
+                      'Warning: Event saved to destination, but original deletion could not '
+                      + 'be confirmed. Both calendars may contain the event. Check before retrying.';
                   }
+                }
 
-                  calendar.events.insert(
-                    {
-                      calendarId: selectedEditCalendarId,
-                      resource: eventResource,
-                    },
-                    async insertErr => {
-                      if (insertErr) {
-                        console.error('The API returned an error: ' + insertErr);
-                        logTable.log('Error: Failed to move event.');
-                        screen.render();
-                        return;
-                      }
-
-                      await finalizeSuccess('Event successfully moved!');
-                    }
+                await finalizeSuccess(message);
+              } catch (err) {
+                console.error('The API returned an error: ' + err);
+                if (saved) {
+                  logTable.log(message);
+                  logTable.log('Error: Event saved, but failed to refresh the display. Run sync.');
+                  if (!formBox.destroyed) {
+                    formBox.destroy();
+                  }
+                  leftTable.focus();
+                } else {
+                  logTable.log(
+                    sameCalendar
+                      ? 'Error: Failed to update event.'
+                      : 'Error: Failed to move event. Original event was not deleted.'
                   );
                 }
-              );
+                screen.render();
+              } finally {
+                saving = false;
+              }
             },
           });
         });
