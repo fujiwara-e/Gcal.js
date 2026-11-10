@@ -1,7 +1,9 @@
 import blessed from 'blessed';
 
-export function createAddForm(screen) {
-  let formBox = screen.children.find(child => child.options.formType === 'event');
+export function createAddForm(screen, { reuse = true } = {}) {
+  let formBox = reuse && screen.children.find(
+    child => child.options.formType === 'event' && child.options.reuse
+  );
   if (formBox) {
     return {
       formBox,
@@ -19,6 +21,7 @@ export function createAddForm(screen) {
     hidden: true,
     keys: true,
     formType: 'event',
+    reuse,
   });
 
   const formFields = {
