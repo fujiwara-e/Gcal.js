@@ -3,6 +3,10 @@
  * displayItems は { date: Date, event: Event | null, isFirstDay: boolean } の配列
  */
 
+function localMidnightFromUtcDate(date) {
+  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
 /**
  * イベントを日付ごとに展開してMapに格納する共通処理
  * 複数日イベントは各日に展開され，各日に { event, isFirstDay } の配列が格納される
@@ -13,37 +17,23 @@ function expandEventsToDateMap(events) {
   const dateEventMap = new Map();
 
   events.forEach(event => {
-    const eventStart = new Date(event.start);
-    const eventEnd = new Date(event.end);
-    eventStart.setHours(0, 0, 0, 0);
-    eventEnd.setHours(0, 0, 0, 0);
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+    const currentDate = event.allDay ? localMidnightFromUtcDate(start) : start;
+    const endBoundary = event.allDay ? localMidnightFromUtcDate(end) : end;
+    currentDate.setHours(0, 0, 0, 0);
 
-    const daysDiff = Math.round(
-      (eventEnd.getTime() - eventStart.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (
-      daysDiff === 0 ||
-      (daysDiff === 1 &&
-        event.start.toTimeString().slice(0, 5) === event.end.toTimeString().slice(0, 5))
-    ) {
-      const dateKey = eventStart.toLocalISOString().split('T')[0];
+    let isFirstDay = true;
+    // 午前0時の終了日は除外し、午前0時に始まるタスクなどは当日に表示する。
+    while (isFirstDay ? currentDate <= endBoundary : currentDate < endBoundary) {
+      const dateKey = currentDate.toLocalISOString().split('T')[0];
       if (!dateEventMap.has(dateKey)) {
         dateEventMap.set(dateKey, []);
       }
-      dateEventMap.get(dateKey).push({ event, isFirstDay: true });
-    } else {
-      const currentDate = new Date(eventStart);
-      let isFirst = true;
-      while (currentDate < eventEnd) {
-        const dateKey = currentDate.toLocalISOString().split('T')[0];
-        if (!dateEventMap.has(dateKey)) {
-          dateEventMap.set(dateKey, []);
-        }
-        dateEventMap.get(dateKey).push({ event, isFirstDay: isFirst });
-        isFirst = false;
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+      dateEventMap.get(dateKey).push({ event, isFirstDay });
+      isFirstDay = false;
+      currentDate.setDate(currentDate.getDate() + 1);
+      currentDate.setHours(0, 0, 0, 0);
     }
   });
 

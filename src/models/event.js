@@ -10,9 +10,20 @@ export class Event {
   * @param {String} calendarId
   * @param {String} calendarName
   * @param {String} itemType
+  * @param {Boolean} allDay
   * @return {Date}
   */
-  constructor(id, start, end, summary, description, calendarId, calendarName, itemType = 'event') {
+  constructor(
+    id,
+    start,
+    end,
+    summary,
+    description,
+    calendarId,
+    calendarName,
+    itemType = 'event',
+    allDay = false
+  ) {
     this.id = id;
     this.start = start;
     this.end = end;
@@ -21,6 +32,7 @@ export class Event {
     this.calendarId = calendarId;
     this.calendarName = calendarName;
     this.itemType = itemType;
+    this.allDay = allDay;
   }
 
   /**
@@ -40,7 +52,8 @@ export class Event {
       e.description || '',
       id,
       summary || 'Unknown Calendar',
-      detectItemType(e)
+      detectItemType(e),
+      Boolean(e.start.date && !e.start.dateTime)
     );
   }
 
