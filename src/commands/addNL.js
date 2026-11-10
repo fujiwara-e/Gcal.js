@@ -2,6 +2,8 @@ import { createCalendarClient } from '../services/googleApi.js';
 import { updateTable } from '../ui/tableUpdater.js';
 import { convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
+import { setCalendarChoices } from '../ui/calendarChoices.js';
+import { waitForListSelection } from '../ui/listSelection.js';
 import { GeminiNLPService } from '../services/geminiService.js';
 import blessed from 'blessed';
 
@@ -14,24 +16,25 @@ export async function addEventNL(auth, screen, calendars, events, allEvents) {
 
     const geminiService = new GeminiNLPService();
 
-    let selectedCalendarId = null;
-    let selectedCalendarName = null;
-
-    const calendarNames = Array.from(
-        new Set(calendars.map(calendar => calendar.summary))
-    );
-    const calendarIDs = Array.from(
-        new Set(calendars.map(calendar => calendar.id))
-    );
+    const choices = setCalendarChoices(calendarList, calendars);
+    const cancelCalendarSelection = () => {
+        calendarList.hide();
+        leftTable.focus();
+        screen.render();
+    };
 
     calendarList.show();
     screen.render();
     calendarList.focus();
 
-    calendarList.once('select', async (item, index) => {
+    waitForListSelection(calendarList, (_item, index) => {
+        const choice = choices[index];
+        if (!choice) {
+            cancelCalendarSelection();
+            return;
+        }
         calendarList.hide();
-        selectedCalendarName = calendarNames[index];
-        selectedCalendarId = calendarIDs[index];
+        const { id: selectedCalendarId, label: selectedCalendarName } = choice;
 
         const nlInputBox = createNaturalLanguageInputBox(screen, selectedCalendarName);
         nlInputBox.show();
@@ -159,7 +162,7 @@ export async function addEventNL(auth, screen, calendars, events, allEvents) {
             leftTable.focus();
             screen.render();
         });
-    });
+    }, cancelCalendarSelection);
 }
 
 function createNaturalLanguageInputBox(screen, calendarName) {
