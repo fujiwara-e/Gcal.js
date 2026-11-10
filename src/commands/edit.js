@@ -14,7 +14,7 @@ import {
 import path from 'path';
 import os from 'os';
 import { loadSetting } from '../services/settingService.js';
-import { openExternalEditor } from '../utils/editor.js';
+import { openExternalEditor, parseEditorFields } from '../utils/editor.js';
 import {
   applyDetailsToForm,
   collectFormValues,
@@ -122,7 +122,7 @@ export function editEvent(
   const collectTaskFormValues = () => ({
     title: taskFormFields.title.getValue().trim(),
     date: taskFormFields.date.getValue().trim(),
-    description: taskFormFields.description.getValue().trim(),
+    description: taskFormFields.description.getValue(),
   });
 
   const buildTaskEditorContent = values => {
@@ -135,14 +135,7 @@ export function editEvent(
   };
 
   const parseTaskEditorContent = text => {
-    const details = {};
-    text.split('\n').forEach(line => {
-      const parts = line.split('|').map(part => part.trim());
-      if (parts.length === 2) {
-        const [label, value] = parts;
-        details[label] = value;
-      }
-    });
+    const details = parseEditorFields(text, 'Notes');
 
     return {
       title: details['Task Title'] || '',

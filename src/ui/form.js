@@ -65,7 +65,7 @@ export function createAddForm(screen, { reuse = true } = {}) {
       inputOnFocus: true,
       mouse: true,
     }),
-    description: blessed.textbox({
+    description: blessed.textarea({
       top: 18,
       left: 2,
       width: '90%-4',
@@ -144,7 +144,7 @@ export function createTaskForm(screen) {
       inputOnFocus: true,
       mouse: true,
     }),
-    description: blessed.textbox({
+    description: blessed.textarea({
       top: 10,
       left: 2,
       width: '90%-4',
