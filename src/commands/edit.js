@@ -3,6 +3,7 @@ import { updateTable } from '../ui/tableUpdater.js';
 import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayFormatter.js';
 import { createAddForm, createTaskForm } from '../ui/form.js';
 import { updateEventDetailTable } from '../ui/table.js';
+import { waitForListSelection } from '../ui/listSelection.js';
 import {
   fetchTaskLists,
   createTask,
@@ -29,7 +30,6 @@ import {
 const TASK_ENTER_HANDLER_KEY = Symbol('taskEnterHandler');
 const TASK_SAVE_HANDLER_KEY = Symbol('taskSaveHandler');
 const TASK_ESCAPE_HANDLER_KEY = Symbol('taskEscapeHandler');
-const TASK_LIST_SELECTION_HANDLER_KEY = Symbol('taskListSelectionHandler');
 
 export function editEvent(
   auth,
@@ -81,7 +81,6 @@ export function editEvent(
   editCommandList.setItems(isTaskItem ? taskEditItems : defaultEditItems);
 
   updateEventDetailTable(eventDetailTable, selectedEvent);
-  eventDetailTable.show();
 
   const showValidationError = () => {
     logTable.log('Error: All fields must be filled in.');
@@ -226,23 +225,20 @@ export function editEvent(
     } catch (err) {
       console.error('The API returned an error: ' + err);
       logTable.log('Error: Failed to load task lists.');
-      screen.render();
+      showEditMenu();
       return;
     }
 
     if (!taskLists.length) {
       logTable.log('Error: No task lists available.');
-      screen.render();
+      showEditMenu();
       return;
     }
 
     const restoreCalendarList = () => {
       calendarList.setItems(originalItems);
       calendarList.setLabel(originalLabel);
-      if (calendarList[TASK_LIST_SELECTION_HANDLER_KEY]) {
-        calendarList.unkey(['escape'], calendarList[TASK_LIST_SELECTION_HANDLER_KEY]);
-        calendarList[TASK_LIST_SELECTION_HANDLER_KEY] = null;
-      }
+      calendarList.hide();
     };
 
     calendarList.setItems(taskLists.map(taskList => taskList.title));
@@ -252,33 +248,22 @@ export function editEvent(
     calendarList.focus();
     screen.render();
 
-    const escapeHandler = () => {
-      restoreCalendarList();
-      calendarList.hide();
-      editCommandList.show();
-      editCommandList.focus();
-      screen.render();
-    };
-
-    calendarList.key(['escape'], escapeHandler);
-    calendarList[TASK_LIST_SELECTION_HANDLER_KEY] = escapeHandler;
-
-    calendarList.once('select', async (_taskItem, taskIndex) => {
+    waitForListSelection(calendarList, async (_taskItem, taskIndex) => {
       const selectedTaskList = taskLists[taskIndex];
 
       restoreCalendarList();
-      calendarList.hide();
-      screen.render();
 
       if (!selectedTaskList) {
         logTable.log('Error: Invalid task list selection.');
-        editCommandList.show();
-        editCommandList.focus();
-        screen.render();
+        showEditMenu();
         return;
       }
 
+      screen.render();
       await handler(selectedTaskList);
+    }, () => {
+      restoreCalendarList();
+      showEditMenu();
     });
   }
 
@@ -340,10 +325,22 @@ export function editEvent(
     }
   }
 
-  editCommandList.show();
-  screen.render();
-  editCommandList.focus();
-  editCommandList.once('select', async (item, index) => {
+  function showEditMenu() {
+    eventDetailTable.show();
+    editCommandList.show();
+    editCommandList.focus();
+    screen.render();
+
+    waitForListSelection(editCommandList, selectEditAction, () => {
+      editCommandList.setItems(defaultEditItems);
+      editCommandList.hide();
+      eventDetailTable.hide();
+      leftTable.focus();
+      screen.render();
+    });
+  }
+
+  async function selectEditAction(_item, index) {
     eventDetailTable.hide();
 
     if (isTaskItem) {
@@ -379,23 +376,23 @@ export function editEvent(
       calendarList.focus();
       screen.render();
 
-      calendarList.once('select', async (calendarItem, calendarIndex) => {
+      waitForListSelection(calendarList, async (_calendarItem, calendarIndex) => {
         const selectedEditCalendar = calendarNames[calendarIndex];
         const selectedEditCalendarId = calendarIDs[calendarIndex];
 
         calendarList.hide();
-        screen.render();
 
         if (!selectedEditCalendar || !selectedEditCalendarId) {
           logTable.log('Error: Invalid calendar selection.');
-          screen.render();
-          editCommandList.show();
-          editCommandList.focus();
-          screen.render();
+          showEditMenu();
           return;
         }
 
+        screen.render();
         await handler(selectedEditCalendar, selectedEditCalendarId);
+      }, () => {
+        calendarList.hide();
+        showEditMenu();
       });
     };
 
@@ -731,17 +728,12 @@ export function editEvent(
       }
 
       default:
+        showEditMenu();
         break;
     }
-  });
+  }
 
-  editCommandList.key(['escape'], () => {
-    editCommandList.setItems(defaultEditItems);
-    editCommandList.hide();
-    eventDetailTable.hide();
-    leftTable.focus();
-    screen.render();
-  });
+  showEditMenu();
 }
 
 /**
@@ -794,7 +786,7 @@ export async function copyEventToDate(
   screen.render();
   calendarList.focus();
 
-  calendarList.once('select', async (item, index) => {
+  waitForListSelection(calendarList, async (_item, index) => {
     const selectedCalendar = calendarNames[index];
     const selectedCalendarId = calendarIDs[index];
     calendarList.hide();
@@ -844,9 +836,7 @@ export async function copyEventToDate(
         );
       },
     });
-  });
-
-  calendarList.key(['escape'], () => {
+  }, () => {
     calendarList.hide();
     leftTable.focus();
     screen.render();

@@ -194,9 +194,9 @@ export function createLayout(calendars, events) {
       });
 
       commandPopup.on('select', item => {
-        inputBox.setValue(item + ' ');
+        inputBox.setValue(item.getText() + ' ');
+        if (screen.focused !== inputBox) inputBox.focus();
         screen.render();
-        inputBox.focus();
       });
 
       commandPopup.key(['escape'], () => {

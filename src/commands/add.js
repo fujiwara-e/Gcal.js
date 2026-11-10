@@ -2,20 +2,54 @@ import { createCalendarClient } from '../services/googleApi.js';
 import { updateTable } from '../ui/tableUpdater.js';
 import { convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
+import { waitForListSelection } from '../ui/listSelection.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
-export function addEvent(auth, screen, calendars, events, allEvents) {
-  const calendar = createCalendarClient({ version: 'v3', auth });
+export function addEvent(
+  auth,
+  screen,
+  calendars,
+  events,
+  allEvents,
+  { returnToCommandLine = false } = {}
+) {
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
-  const inputBox = screen.children.find(child => child.options.label === 'Commandline');
+  const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
+  const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
+
+  calendarList.show();
+  calendarList.focus();
+  screen.render();
+
+  const selectCalendar = (_item, index) => {
+    calendarList.hide();
+    openAddForm(auth, screen, calendars, events, allEvents, calendarNames[index], calendarIDs[index]);
+  };
+  const cancelCalendarSelection = () => {
+    calendarList.hide();
+    if (returnToCommandLine) {
+      const inputBox = screen.children.find(child => child.options.label === 'Commandline');
+      inputBox.setValue('add ');
+      inputBox.show();
+      inputBox.focus();
+    } else {
+      const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
+      leftTable.focus();
+    }
+    screen.render();
+  };
+  waitForListSelection(calendarList, selectCalendar, cancelCalendarSelection);
+}
+
+function openAddForm(auth, screen, calendars, events, allEvents, selectedCalendar, selectedCalendarId) {
+  const calendar = createCalendarClient({ version: 'v3', auth });
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
   const { formBox, formFields } = createAddForm(screen);
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
   const tempFilePath = path.join(os.tmpdir(), 'blessed-editor.txt');
 
-  var selectedCalendarId = null;
   var title = null;
   var date = null;
   var startTime = null;
@@ -24,20 +58,10 @@ export function addEvent(auth, screen, calendars, events, allEvents) {
   var allDay = null;
   var event = null;
 
-  const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
-  const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
-
-  calendarList.show();
-  screen.render();
-  calendarList.focus();
-  calendarList.once('select', (item, index) => {
-    calendarList.hide();
-    const selectedCalendar = calendarNames[index];
-    selectedCalendarId = calendarIDs[index];
-    formBox.setLabel(`Add Event - ${selectedCalendar}  (Ctrl+S to save)`);
-    const today = new Date();
-    today.setHours(today.getHours(), 0, 0, 0);
-    const eventContent = `Event Title | 
+  formBox.setLabel(`Add Event - ${selectedCalendar}  (Ctrl+S to save)`);
+  const today = new Date();
+  today.setHours(today.getHours(), 0, 0, 0);
+  const eventContent = `Event Title |
 Date (YYYY-MM-DD) | ${today.toLocalISOString().slice(0, 10)}
 Start Time (HH:mm) | ${today.toLocalISOString().slice(11, 16)}
 End Time (HH:mm) | ${today.toLocalISOString().slice(11, 16)}
@@ -45,59 +69,58 @@ All Day (y/n)| n
 Description | 
 `;
 
-    fs.writeFileSync(tempFilePath, eventContent, 'utf8');
+  fs.writeFileSync(tempFilePath, eventContent, 'utf8');
 
-    const editor = process.env.EDITOR || 'vim';
+  const editor = process.env.EDITOR || 'vim';
 
-    screen.exec(editor, [tempFilePath], {}, (err, code, signal) => {
-      if (err) {
-        console.error('Error opening editor:', err);
-        return;
-      }
+  screen.exec(editor, [tempFilePath], {}, (err, code, signal) => {
+    if (err) {
+      console.error('Error opening editor:', err);
+      return;
+    }
 
-      if (code !== true) {
-        console.log(`Editor exited with code: ${code}`);
-        return;
-      }
-      const updatedText = fs.readFileSync(tempFilePath, 'utf8');
-      // TODO: ここで description なら一行だけでなく，全行引っ張ってくるようにする
-      const extractDetails = text => {
-        const lines = text.split('\n');
-        const details = {};
+    if (code !== true) {
+      console.log(`Editor exited with code: ${code}`);
+      return;
+    }
+    const updatedText = fs.readFileSync(tempFilePath, 'utf8');
+    // TODO: ここで description なら一行だけでなく，全行引っ張ってくるようにする
+    const extractDetails = text => {
+      const lines = text.split('\n');
+      const details = {};
 
-        lines.forEach(line => {
-          const parts = line.split('|').map(part => part.trim());
-          if (parts.length === 2) {
-            const [label, value] = parts;
-            details[label] = value;
-          }
-        });
+      lines.forEach(line => {
+        const parts = line.split('|').map(part => part.trim());
+        if (parts.length === 2) {
+          const [label, value] = parts;
+          details[label] = value;
+        }
+      });
 
-        return details;
-      };
+      return details;
+    };
 
-      const extractedDetails = extractDetails(updatedText);
-      title = extractedDetails['Event Title'];
-      date = extractedDetails['Date (YYYY-MM-DD)'];
-      startTime = extractedDetails['Start Time (HH:mm)'];
-      endTime = extractedDetails['End Time (HH:mm)'];
-      description = extractedDetails['Description'];
-      allDay = extractedDetails['All Day (y/n)'] === 'y' ? true : false;
+    const extractedDetails = extractDetails(updatedText);
+    title = extractedDetails['Event Title'];
+    date = extractedDetails['Date (YYYY-MM-DD)'];
+    startTime = extractedDetails['Start Time (HH:mm)'];
+    endTime = extractedDetails['End Time (HH:mm)'];
+    description = extractedDetails['Description'];
+    allDay = extractedDetails['All Day (y/n)'] === 'y' ? true : false;
 
-      formFields.title.setValue(title);
-      formFields.date.setValue(date);
-      formFields.startTime.setValue(startTime);
-      formFields.endTime.setValue(endTime);
-      formFields.description.setValue(description);
-      allDay ? formFields.all_day.check() : formFields.all_day.uncheck();
+    formFields.title.setValue(title);
+    formFields.date.setValue(date);
+    formFields.startTime.setValue(startTime);
+    formFields.endTime.setValue(endTime);
+    formFields.description.setValue(description);
+    allDay ? formFields.all_day.check() : formFields.all_day.uncheck();
 
-      screen.render();
-      fs.unlinkSync(tempFilePath);
-    });
-    formBox.show();
-    formBox.focus();
     screen.render();
+    fs.unlinkSync(tempFilePath);
   });
+  formBox.show();
+  formBox.focus();
+  screen.render();
 
   formBox.key(['enter'], () => {
     var title = formFields.title.getValue().trim();
