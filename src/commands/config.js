@@ -6,10 +6,10 @@ import {
 import { refreshCalendarList } from '../services/calendarService.js';
 import { updateTable, updateEventsAndUI, updateGraph } from '../ui/tableUpdater.js';
 import { setCalendarColorMap } from '../ui/graph.js';
+import { createCalendarChoices } from '../ui/calendarChoices.js';
 
 export async function configCommand(auth, screen, calendars, events, allEvents) {
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
-  const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
   const rightGraph = screen.children.find(child => child.options.label === 'Filled Time Graph');
   const targetDate = leftTable.displayItems?.[leftTable.selected]?.date || new Date();
@@ -17,7 +17,6 @@ export async function configCommand(auth, screen, calendars, events, allEvents) 
   async function reloadCalendars() {
     const selectedCalendars = await fetchCalendarsFromDatabase();
     calendars.splice(0, calendars.length, ...selectedCalendars);
-    calendarList.setItems(calendars.map(calendar => calendar.summary));
     setCalendarColorMap(calendars);
 
     const byId = new Map(calendars.map(calendar => [calendar.id, calendar]));
@@ -68,14 +67,14 @@ export async function configCommand(auth, screen, calendars, events, allEvents) 
   });
 
   const selectedCalendarIds = new Set(calendars.map(calendar => calendar.id));
-  const checkboxes = allCalendars.map((calendar, index) => {
+  const checkboxes = createCalendarChoices(allCalendars).map(({ id, label }, index) => {
     const checkbox = blessed.checkbox({
       parent: form,
       top: index,
       left: 2,
       height: 1,
-      content: calendar.summary,
-      checked: selectedCalendarIds.has(calendar.id),
+      content: label,
+      checked: selectedCalendarIds.has(id),
       mouse: true,
       keys: true,
       style: { fg: 'white', focus: { bg: 'blue', bold: true } },
@@ -89,7 +88,7 @@ export async function configCommand(auth, screen, calendars, events, allEvents) 
       }
       screen.render();
     });
-    return { checkbox, id: calendar.id };
+    return { checkbox, id };
   });
 
   let saving = false;

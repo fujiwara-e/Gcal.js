@@ -3,6 +3,7 @@ import { updateTable } from '../ui/tableUpdater.js';
 import { convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
 import { waitForListSelection } from '../ui/listSelection.js';
+import { setCalendarChoices } from '../ui/calendarChoices.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -16,16 +17,20 @@ export function addEvent(
   { returnToCommandLine = false } = {}
 ) {
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
-  const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
-  const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
+  const choices = setCalendarChoices(calendarList, calendars);
 
   calendarList.show();
   calendarList.focus();
   screen.render();
 
   const selectCalendar = (_item, index) => {
+    const choice = choices[index];
+    if (!choice) {
+      cancelCalendarSelection();
+      return;
+    }
     calendarList.hide();
-    openAddForm(auth, screen, calendars, events, allEvents, calendarNames[index], calendarIDs[index]);
+    openAddForm(auth, screen, calendars, events, allEvents, choice.label, choice.id);
   };
   const cancelCalendarSelection = () => {
     calendarList.hide();

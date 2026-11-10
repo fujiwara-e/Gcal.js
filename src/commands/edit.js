@@ -4,6 +4,7 @@ import { groupEventsByDate, formatGroupedEventsDescending } from '../ui/displayF
 import { createAddForm, createTaskForm } from '../ui/form.js';
 import { updateEventDetailTable } from '../ui/table.js';
 import { waitForListSelection } from '../ui/listSelection.js';
+import { setCalendarChoices } from '../ui/calendarChoices.js';
 import {
   fetchTaskLists,
   createTask,
@@ -74,8 +75,6 @@ export function editEvent(
   const selectedEventsId = selectedEvent?.id ?? null;
   const fallbackDate = selectedEvent?.start || selectedDate || new Date();
   const fallbackDateInfo = formatEventDate(fallbackDate);
-  const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
-  const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
   const isTaskItem = Boolean(selectedEvent?.isTask && selectedEvent.isTask());
 
   editCommandList.setItems(isTaskItem ? taskEditItems : defaultEditItems);
@@ -371,25 +370,24 @@ export function editEvent(
     }
 
     const promptCalendarSelection = handler => {
+      const choices = setCalendarChoices(calendarList, calendars);
       editCommandList.hide();
       calendarList.show();
       calendarList.focus();
       screen.render();
 
       waitForListSelection(calendarList, async (_calendarItem, calendarIndex) => {
-        const selectedEditCalendar = calendarNames[calendarIndex];
-        const selectedEditCalendarId = calendarIDs[calendarIndex];
-
+        const choice = choices[calendarIndex];
         calendarList.hide();
 
-        if (!selectedEditCalendar || !selectedEditCalendarId) {
+        if (!choice) {
           logTable.log('Error: Invalid calendar selection.');
           showEditMenu();
           return;
         }
 
         screen.render();
-        await handler(selectedEditCalendar, selectedEditCalendarId);
+        await handler(choice.label, choice.id);
       }, () => {
         calendarList.hide();
         showEditMenu();
@@ -756,9 +754,6 @@ export async function copyEventToDate(
   const { formBox, formFields } = createAddForm(screen);
   const tempFilePath = path.join(os.tmpdir(), 'blessed-editor.txt');
 
-  const calendarNames = Array.from(new Set(calendars.map(cal => cal.summary)));
-  const calendarIDs = Array.from(new Set(calendars.map(cal => cal.id)));
-
   const showValidationError = () => {
     logTable.log('Error: All fields must be filled in.');
     screen.render();
@@ -782,13 +777,24 @@ export async function copyEventToDate(
     date: targetDateInfo?.date || baseValues.date,
   };
 
+  const choices = setCalendarChoices(calendarList, calendars);
+  const cancelCalendarSelection = () => {
+    calendarList.hide();
+    leftTable.focus();
+    screen.render();
+    logTable.log('Copy cancelled.');
+  };
   calendarList.show();
   screen.render();
   calendarList.focus();
 
   waitForListSelection(calendarList, async (_item, index) => {
-    const selectedCalendar = calendarNames[index];
-    const selectedCalendarId = calendarIDs[index];
+    const choice = choices[index];
+    if (!choice) {
+      cancelCalendarSelection();
+      return;
+    }
+    const { label: selectedCalendar, id: selectedCalendarId } = choice;
     calendarList.hide();
     screen.render();
 
@@ -836,10 +842,5 @@ export async function copyEventToDate(
         );
       },
     });
-  }, () => {
-    calendarList.hide();
-    leftTable.focus();
-    screen.render();
-    logTable.log('Copy cancelled.');
-  });
+  }, cancelCalendarSelection);
 }
