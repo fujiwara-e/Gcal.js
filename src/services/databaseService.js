@@ -3,6 +3,9 @@ import { Calendar } from '../models/calendar.js';
 import { Event } from '../models/event.js';
 import Task from '../models/task.js';
 
+const createEventsTable =
+  "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event', allDay BOOLEAN)";
+
 export async function mergeDuplicateEvents() {
   const db = new sqlite3.Database('./db/Gcal.db');
 
@@ -16,6 +19,8 @@ export async function mergeDuplicateEvents() {
       HAVING count > 1
     `
     );
+
+    if (duplicates.length > 0) await ensureAllDayColumn(db);
 
     for (const duplicate of duplicates) {
       const { id } = duplicate;
@@ -42,8 +47,8 @@ export async function mergeDuplicateEvents() {
       await runQuery(
         db,
         `
-        INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName, itemType)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName, itemType, allDay)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         [
           id,
@@ -54,6 +59,7 @@ export async function mergeDuplicateEvents() {
           mergedEvent.calendarId,
           mergedEvent.calendarName,
           mergedEvent.itemType || 'event',
+          mergedEvent.allDay ?? null,
         ]
       );
     }
@@ -196,10 +202,7 @@ export async function configCalendarListInDatabase(calendarIDs) {
 }
 export async function deleteEventsFromDatabase(events) {
   const db = new sqlite3.Database('./db/Gcal.db');
-  await runQuery(
-    db,
-    "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event')"
-  );
+  await runQuery(db, createEventsTable);
   if (events.length > 0) {
     const deletePromises = events.map(event =>
       runQuery(db, 'DELETE FROM Events WHERE id = ?', [event.id])
@@ -289,14 +292,25 @@ export async function insertCalendarListToDatabase(
   }
 }
 
+async function ensureAllDayColumn(db) {
+  const hasColumn = async () =>
+    (await allQuery(db, 'PRAGMA table_info(Events)')).some(column => column.name === 'allDay');
+  if (await hasColumn()) return;
+
+  try {
+    await runQuery(db, 'ALTER TABLE Events ADD COLUMN allDay BOOLEAN');
+  } catch (err) {
+    // A concurrent writer may have added the column after the first check.
+    if (!(await hasColumn())) throw err;
+  }
+}
+
 export async function insertEventsToDatabase(events) {
   const db = new sqlite3.Database('./db/Gcal.db');
 
   try {
-    await runQuery(
-      db,
-      "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event')"
-    );
+    await runQuery(db, createEventsTable);
+    await ensureAllDayColumn(db);
 
     if (events.length > 0) {
       for (const event of events) {
@@ -305,7 +319,7 @@ export async function insertEventsToDatabase(events) {
         if (existing.length === 0) {
           await runQuery(
             db,
-            'INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName, itemType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO Events (id, start, end, summary, description, calendarId, calendarName, itemType, allDay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
               event.id,
               event.start.toISOString(),
@@ -315,12 +329,13 @@ export async function insertEventsToDatabase(events) {
               event.calendarId,
               event.calendarName,
               event.itemType || 'event',
+              event.allDay ?? null,
             ]
           );
         } else {
           await runQuery(
             db,
-            'UPDATE Events SET start = ?, end = ?, summary = ?, description = ?, calendarId = ?, calendarName = ?, itemType = ? WHERE id = ?',
+            'UPDATE Events SET start = ?, end = ?, summary = ?, description = ?, calendarId = ?, calendarName = ?, itemType = ?, allDay = ? WHERE id = ?',
             [
               event.start.toISOString(),
               event.end.toISOString(),
@@ -329,6 +344,7 @@ export async function insertEventsToDatabase(events) {
               event.calendarId,
               event.calendarName,
               event.itemType || 'event',
+              event.allDay ?? null,
               event.id,
             ]
           );
@@ -352,14 +368,21 @@ export async function insertEventsToDatabase(events) {
   }
 }
 
+function isLegacyAllDay(start, end) {
+  // The old cache stored all-day dates as UTC midnights without a separate flag.
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return (
+    end > start &&
+    start.getTime() % millisecondsPerDay === 0 &&
+    end.getTime() % millisecondsPerDay === 0
+  );
+}
+
 export async function fetchEventsFromDatabase(calendars) {
   if (calendars.length === 0) return [];
   const db = new sqlite3.Database('./db/Gcal.db');
   const events = [];
-  await runQuery(
-    db,
-    "CREATE TABLE IF NOT EXISTS Events (id TEXT PRIMARY KEY, start TEXT, end TEXT, summary TEXT, description TEXT, calendarId TEXT, calendarName TEXT, itemType TEXT DEFAULT 'event')"
-  );
+  await runQuery(db, createEventsTable);
   await new Promise((resolve, reject) => {
     for (const calendar of calendars) {
       db.each(
@@ -381,7 +404,8 @@ export async function fetchEventsFromDatabase(calendars) {
                 row.description,
                 row.calendarId,
                 calendar.summary,
-                row.itemType || 'event'
+                row.itemType || 'event',
+                row.allDay == null ? isLegacyAllDay(start, end) : Boolean(row.allDay)
               )
             );
           }
