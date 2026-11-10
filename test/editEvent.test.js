@@ -9,18 +9,22 @@ import blessed from 'blessed';
 import '../src/utils/datePrototype.js';
 
 const originalDirectory = process.cwd();
+const originalTmpdir = process.env.TMPDIR;
 const createBlessedScreen = blessed.screen;
 let directory;
 let fixtureDirectory;
 let screen;
+let addEvent;
 let editEvent;
 let db;
 let Event;
 
 before(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gcal-edit-'));
+  process.env.TMPDIR = directory;
   process.chdir(directory);
   await fs.writeFile('setting.json', '{"tasksEnabled":false}');
+  ({ addEvent } = await import('../src/commands/add.js'));
   ({ editEvent } = await import('../src/commands/edit.js'));
   db = await import('../src/services/databaseService.js');
   ({ default: Event } = await import('../src/models/event.js'));
@@ -40,6 +44,8 @@ afterEach(async () => {
 
 after(async () => {
   process.chdir(originalDirectory);
+  if (originalTmpdir === undefined) delete process.env.TMPDIR;
+  else process.env.TMPDIR = originalTmpdir;
   await fs.rm(directory, { recursive: true, force: true });
 });
 
@@ -245,6 +251,110 @@ test('Escape after completing add returns to Commandline and permits retry', asy
   assert.equal(form.hidden, false);
   assert.equal(editor.mock.callCount(), 1);
   assert.equal(form.listeners('key C-s').length, 1);
+});
+
+function manualAddFixture(editDraft) {
+  const { widgets } = createEditScreen();
+  const calendars = ['source', 'destination'].map(id => ({ id, summary: id, syncToken: null }));
+  const writes = [];
+  const auth = { request: async options => {
+    if (options.method === 'POST') {
+      const [, calendarId] = new URL(options.url).pathname.match(/\/calendars\/([^/]+)\/events$/);
+      writes.push({ calendarId, ...options.data });
+      return { data: options.data };
+    }
+    assert.equal(options.method, 'GET');
+    return { data: { items: [] } };
+  } };
+  let editorFinished;
+  screen.exec = (_command, [filename], _options, done) => {
+    editorFinished = fs.readFile(filename, 'utf8')
+      .then(text => fs.writeFile(filename, editDraft(text)))
+      .then(() => done(null, true), done);
+  };
+  const waitForEditor = async () => {
+    await editorFinished;
+    await flushInput();
+  };
+  const press = (name, full = name) => screen.program.emit('keypress', null, { name, full });
+  const calendarList = widgets['Calendar List'];
+  calendarList.setItems(calendars.map(calendar => calendar.summary));
+  const start = () => addEvent(auth, screen, calendars, [], []);
+  const open = async index => {
+    start();
+    calendarList.select(index);
+    press('enter');
+    const form = screen.focused;
+    await waitForEditor();
+    return form;
+  };
+  return { writes, open, press, start, waitForEditor };
+}
+
+function eventField(form, label) {
+  return form.children.find(child => child.options.label === label);
+}
+
+test('cancelling manual add discards its form and the next save only submits the new draft', async () => {
+  let draft = 0;
+  const f = manualAddFixture(text => text.replace(/^Event Title \|.*$/m, `Event Title | Draft ${++draft}`));
+  const abandoned = await f.open(0);
+  f.start();
+  assert.equal(screen.focused, abandoned);
+  f.press('escape');
+  assert.equal(screen.clickable.some(widget => widget.destroyed), false);
+  assert.equal(screen.keyable.some(widget => widget.destroyed), false);
+
+  const form = await f.open(1);
+  const save = form.listeners('key C-s')[0];
+  await Promise.all([save(), save()]);
+
+  assert.equal(abandoned.destroyed, true);
+  assert.notEqual(form, abandoned);
+  assert.deepEqual(f.writes.map(write => [write.calendarId, write.summary]), [['destination', 'Draft 2']]);
+});
+
+test('manual add saves the current fields with Ctrl+S from a focused textbox', { timeout: 2000 }, async () => {
+  const f = manualAddFixture(text => text
+    .replace(/^Event Title \|.*$/m, 'Event Title | Initial title')
+    .replace(/^All Day \(y\/n\)\s*\| n$/m, 'All Day (y/n) | y'));
+  const form = await f.open(0);
+  const title = eventField(form, 'Event Title');
+  title.setValue('Changed title');
+  eventField(form, 'Date (YYYY-MM-DD)').setValue('2026-11-10');
+  eventField(form, 'Start Time (HH:mm)').setValue('13:30');
+  eventField(form, 'End Time (HH:mm)').setValue('14:15');
+  eventField(form, 'Description').setValue('Changed description');
+  const allDay = form.children.find(child => child.options.content === 'All Day');
+  assert.equal(allDay.checked, true);
+  allDay.uncheck();
+
+  title.focus();
+  await flushInput();
+  const closed = new Promise(resolve => form.once('destroy', resolve));
+  f.press('s', 'C-s');
+  await closed;
+
+  assert.deepEqual(f.writes, [{
+    calendarId: 'source',
+    summary: 'Changed title',
+    description: 'Changed description',
+    start: { dateTime: new Date(2026, 10, 10, 13, 30).toISOString() },
+    end: { dateTime: new Date(2026, 10, 10, 14, 15).toISOString() },
+  }]);
+});
+
+test('manual add saves edits from reopening the external editor', async () => {
+  let draft = 0;
+  const f = manualAddFixture(text => text.replace(/^Event Title \|.*$/m, `Event Title | Draft ${++draft}`));
+  const form = await f.open(0);
+  f.press('enter');
+  await f.waitForEditor();
+  assert.equal(eventField(form, 'Event Title').getValue(), 'Draft 2');
+
+  await form.listeners('key C-s')[0]();
+
+  assert.deepEqual(f.writes.map(write => write.summary), ['Draft 2']);
 });
 
 test('same-calendar editing patches the existing event and preserves other fields', async t => {

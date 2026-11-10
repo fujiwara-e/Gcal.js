@@ -1,11 +1,18 @@
 import { createCalendarClient } from '../services/googleApi.js';
 import { updateTable } from '../ui/tableUpdater.js';
-import { convertToDateTime } from '../utils/dateUtils.js';
 import { createAddForm } from '../ui/form.js';
 import { waitForListSelection } from '../ui/listSelection.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import {
+  applyDetailsToForm,
+  buildCalendarEventResource,
+  collectFormValues,
+  formatEventDate,
+  openEditorAndParse,
+  validateFormValues,
+} from '../utils/eventFormUtils.js';
 
 export function addEvent(
   auth,
@@ -15,6 +22,15 @@ export function addEvent(
   allEvents,
   { returnToCommandLine = false } = {}
 ) {
+  const activeForm = screen.children.find(
+    child => child.options.formType === 'event' && child.options.reuse === false
+  );
+  if (activeForm) {
+    activeForm.focus();
+    screen.render();
+    return;
+  }
+
   const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
   const calendarNames = Array.from(new Set(calendars.map(calendar => calendar.summary)));
   const calendarIDs = Array.from(new Set(calendars.map(calendar => calendar.id)));
@@ -46,197 +62,93 @@ export function addEvent(
 function openAddForm(auth, screen, calendars, events, allEvents, selectedCalendar, selectedCalendarId) {
   const calendar = createCalendarClient({ version: 'v3', auth });
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
-  const { formBox, formFields } = createAddForm(screen);
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
-  const tempFilePath = path.join(os.tmpdir(), 'blessed-editor.txt');
+  const { formBox, formFields } = createAddForm(screen, { reuse: false });
+  const options = { includeAllDay: true };
+  let editing = false;
+  let saving = false;
 
-  var title = null;
-  var date = null;
-  var startTime = null;
-  var endTime = null;
-  var description = null;
-  var allDay = null;
-  var event = null;
-
-  formBox.setLabel(`Add Event - ${selectedCalendar}  (Ctrl+S to save)`);
   const today = new Date();
-  today.setHours(today.getHours(), 0, 0, 0);
-  const eventContent = `Event Title |
-Date (YYYY-MM-DD) | ${today.toLocalISOString().slice(0, 10)}
-Start Time (HH:mm) | ${today.toLocalISOString().slice(11, 16)}
-End Time (HH:mm) | ${today.toLocalISOString().slice(11, 16)}
-All Day (y/n)| n
-Description | 
-`;
+  today.setMinutes(0, 0, 0);
+  const { date, time } = formatEventDate(today);
+  applyDetailsToForm(formFields, { date, startTime: time, endTime: time }, options);
+  formBox.setLabel(`Add Event - ${selectedCalendar}  (Ctrl+S to save)`);
 
-  fs.writeFileSync(tempFilePath, eventContent, 'utf8');
-
-  const editor = process.env.EDITOR || 'vim';
-
-  screen.exec(editor, [tempFilePath], {}, (err, code, signal) => {
-    if (err) {
-      console.error('Error opening editor:', err);
-      return;
-    }
-
-    if (code !== true) {
-      console.log(`Editor exited with code: ${code}`);
-      return;
-    }
-    const updatedText = fs.readFileSync(tempFilePath, 'utf8');
-    // TODO: ここで description なら一行だけでなく，全行引っ張ってくるようにする
-    const extractDetails = text => {
-      const lines = text.split('\n');
-      const details = {};
-
-      lines.forEach(line => {
-        const parts = line.split('|').map(part => part.trim());
-        if (parts.length === 2) {
-          const [label, value] = parts;
-          details[label] = value;
-        }
-      });
-
-      return details;
-    };
-
-    const extractedDetails = extractDetails(updatedText);
-    title = extractedDetails['Event Title'];
-    date = extractedDetails['Date (YYYY-MM-DD)'];
-    startTime = extractedDetails['Start Time (HH:mm)'];
-    endTime = extractedDetails['End Time (HH:mm)'];
-    description = extractedDetails['Description'];
-    allDay = extractedDetails['All Day (y/n)'] === 'y' ? true : false;
-
-    formFields.title.setValue(title);
-    formFields.date.setValue(date);
-    formFields.startTime.setValue(startTime);
-    formFields.endTime.setValue(endTime);
-    formFields.description.setValue(description);
-    allDay ? formFields.all_day.check() : formFields.all_day.uncheck();
-
-    screen.render();
-    fs.unlinkSync(tempFilePath);
-  });
-  formBox.show();
-  formBox.focus();
-  screen.render();
-
-  formBox.key(['enter'], () => {
-    var title = formFields.title.getValue().trim();
-    var date = formFields.date.getValue().trim();
-    var startTime = formFields.startTime.getValue().trim();
-    var endTime = formFields.endTime.getValue().trim();
-    var description = formFields.description.getValue().trim();
-    var allDay = formFields.all_day.checked;
-    const eventContent = `Event Title | ${title}
-  Date (YYYY-MM-DD) | ${date}
-  Start Time (HH:mm) | ${startTime}
-  End Time (HH:mm) |  ${endTime}
-  All Day (y/n)| ${allDay ? 'y' : 'n'}
-  Description | ${description}
-      `;
-    fs.writeFileSync(tempFilePath, eventContent, 'utf8');
-    const editor = process.env.EDITOR || 'vim';
-    screen.exec(editor, [tempFilePath], {}, (err, code, signal) => {
-      if (err) {
-        console.error('Error opening editor:', err);
-        return;
-      }
-      if (code !== true) {
-        console.log(`Editor exited with code: ${code}`);
-        return;
-      }
-      const updatedText = fs.readFileSync(tempFilePath, 'utf8');
-      const extractDetails = text => {
-        const lines = text.split('\n');
-        const details = {};
-        lines.forEach(line => {
-          const parts = line.split('|').map(part => part.trim());
-          if (parts.length === 2) {
-            const [label, value] = parts;
-            details[label] = value;
-          }
-        });
-        return details;
-      };
-
-      const extractedDetails = extractDetails(updatedText);
-      title = extractedDetails['Event Title'];
-      date = extractedDetails['Date (YYYY-MM-DD)'];
-      startTime = extractedDetails['Start Time (HH:mm)'];
-      endTime = extractedDetails['End Time (HH:mm)'];
-      description = extractedDetails['Description'];
-      allDay = extractedDetails['All Day (y/n)'] === 'y' ? true : false;
-
-      formFields.title.setValue(title);
-      formFields.date.setValue(date);
-      formFields.startTime.setValue(startTime);
-      formFields.endTime.setValue(endTime);
-      formFields.description.setValue(description);
-      allDay ? formFields.all_day.check() : formFields.all_day.uncheck();
-
-      screen.render();
-
-      fs.unlinkSync(tempFilePath);
-    });
-  });
-
-  formBox.key(['escape'], () => {
-    formBox.hide();
+  function closeForm() {
     leftTable.focus();
+    // Blessed unregisters a widget from input handling when it is detached.
+    for (const field of Object.values(formFields)) field.destroy();
+    formBox.destroy();
     screen.render();
-    logTable.log('Add event cancelled.');
-  });
+  }
 
-  formBox.key(['C-s'], () => {
-    formBox.hide();
+  async function editDraft() {
+    if (editing || saving || formBox.destroyed) return;
+    editing = true;
+    let directory;
+    try {
+      directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gcal-add-'));
+      const values = collectFormValues(formFields, options);
+      const updatedValues = await openEditorAndParse(
+        screen, path.join(directory, 'event.txt'), values, options
+      );
+      if (updatedValues && !formBox.destroyed) {
+        applyDetailsToForm(formFields, updatedValues, options);
+        screen.render();
+      }
+    } catch (err) {
+      logTable.log(`Error: Failed to edit event draft: ${err.message}`);
+      screen.render();
+    } finally {
+      editing = false;
+      if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
 
-    // Object.values(formFields).forEach(field => field.clearValue());
-
-    if (!title || !date || !startTime || !endTime) {
+  async function save() {
+    if (editing || saving || formBox.destroyed) return;
+    const values = collectFormValues(formFields, options);
+    if (!validateFormValues(values)) {
       logTable.log('Error: All fields must be filled in.');
       screen.render();
       return;
     }
 
-    if (allDay) {
-      event = {
-        summary: title,
-        description: description,
-        start: {
-          date: date,
-        },
-        end: {
-          date: date,
-        },
-      };
-    } else {
-      event = {
-        summary: title,
-        description: description,
-        start: {
-          dateTime: convertToDateTime(date, startTime).toISOString(),
-        },
-        end: {
-          dateTime: convertToDateTime(date, endTime).toISOString(),
-        },
-      };
-    }
-    calendar.events.insert(
-      {
+    saving = true;
+    try {
+      await calendar.events.insert({
         calendarId: selectedCalendarId,
-        resource: event,
-      },
-      async (err, res) => {
-        if (err) return console.error('The API returned an error: ' + err);
-        await updateTable(auth, leftTable, calendars, events, allEvents);
-        logTable.log('Event successfully registered!');
-        formBox.destroy();
-        screen.render();
-        leftTable.focus();
-        screen.render();
-      }
-    );
+        resource: buildCalendarEventResource(values),
+      });
+    } catch (err) {
+      saving = false;
+      logTable.log(`Error: Failed to register event: ${err.message}`);
+      screen.render();
+      return;
+    }
+
+    try {
+      await updateTable(auth, leftTable, calendars, events, allEvents);
+      logTable.log('Event successfully registered!');
+    } catch {
+      logTable.log('Error: Event saved, but failed to refresh the display. Run sync.');
+    }
+    closeForm();
+  }
+
+  formBox.key(['enter'], editDraft);
+  formBox.key(['escape'], () => {
+    if (saving) return;
+    logTable.log('Add event cancelled.');
+    closeForm();
   });
+  formBox.key(['C-s'], save);
+  formBox.on('element key C-s', field => {
+    if (field !== formBox) return save();
+  });
+
+  formBox.show();
+  formBox.focus();
+  screen.render();
+  void editDraft();
 }
