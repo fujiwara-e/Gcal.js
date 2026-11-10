@@ -14,7 +14,7 @@ export function handleInput(auth, inputBox, screen, calendars, events, allEvents
 
   switch (command) {
     case 'add':
-      addEvent(auth, screen, calendars, events, allEvents);
+      addEvent(auth, screen, calendars, events, allEvents, { returnToCommandLine: true });
       break;
     case 'llm':
       addEventNL(auth, screen, calendars, events, allEvents);

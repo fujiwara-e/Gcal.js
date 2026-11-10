@@ -4,10 +4,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
+import { setImmediate as flushInput, setTimeout as delay } from 'node:timers/promises';
 import blessed from 'blessed';
 import '../src/utils/datePrototype.js';
 
 const originalDirectory = process.cwd();
+const createBlessedScreen = blessed.screen;
 let directory;
 let fixtureDirectory;
 let screen;
@@ -41,25 +43,34 @@ after(async () => {
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-async function openEdit(t, destination = 'source') {
+function createTerminalScreen(options = {}) {
   const input = new PassThrough();
   input.isTTY = false;
   const output = new Writable({ write(_chunk, _encoding, done) { done(); } });
   output.columns = 120;
   output.rows = 40;
   output.isTTY = true;
-  screen = blessed.screen({ input, output, terminal: 'xterm-256color' });
+  return createBlessedScreen({ ...options, input, output, terminal: 'xterm-256color' });
+}
+
+function createEditScreen() {
+  screen = createTerminalScreen();
   const widgets = {};
   for (const label of [
     'Calendar List', 'Upcoming Events', 'Current Events', 'Edit List', 'Event Details',
   ]) {
-    widgets[label] = blessed.list({ parent: screen, label, width: 50, height: 10 });
+    widgets[label] = blessed.list({ parent: screen, label, width: 50, height: 10, keys: true });
   }
   const log = blessed.log({ parent: screen, label: 'Gcal.js Log', width: 120, height: 10 });
   const logs = [];
   log.log = message => logs.push(message);
   // Exercise editor parsing without launching an external process.
   screen.exec = (_command, _args, _options, done) => done(null, true);
+  return { widgets, logs };
+}
+
+async function openEdit(t, destination = 'source') {
+  const { widgets, logs } = createEditScreen();
   t.mock.method(console, 'error', () => {});
 
   const start = new Date();
@@ -136,6 +147,105 @@ async function openEdit(t, destination = 'source') {
   assert.equal(typeof save, 'function');
   return { ...state, state, original, form, save, events, allEvents, calendars };
 }
+
+test('Escape in Calendar List returns to the edit menu and allows adding again', t => {
+  const { widgets } = createEditScreen();
+  const editor = t.mock.method(screen, 'exec');
+  const calendars = [{ id: 'source', summary: 'source' }];
+  const calendarList = widgets['Calendar List'];
+  const editList = widgets['Edit List'];
+  const details = widgets['Event Details'];
+  const press = name => screen.program.emit('keypress', null, { name, full: name });
+  const openMenu = () => editEvent({}, screen, calendars, null, [], [], new Date(2026, 10, 10));
+  calendarList.setItems(['source']);
+  calendarList.hide();
+  openMenu();
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    press('enter');
+    assert.equal(screen.focused, calendarList);
+    press('escape');
+    assert.equal(calendarList.hidden, true);
+    assert.equal(editList.hidden, false);
+    assert.equal(details.hidden, false);
+    assert.equal(screen.focused, editList);
+    assert.equal(calendarList.listeners('select').length, 0);
+    assert.equal(editor.mock.callCount(), 0);
+  }
+
+  press('escape');
+  assert.equal(editList.hidden, true);
+  assert.equal(screen.focused, widgets['Upcoming Events']);
+
+  openMenu();
+  press('enter');
+  press('enter');
+  const form = screen.children.find(child => child.options.formType === 'event');
+  assert.equal(calendarList.hidden, true);
+  assert.equal(calendarList.listeners('cancel').length, 0);
+  assert.equal(form.hidden, false);
+  assert.equal(editor.mock.callCount(), 1);
+});
+
+test('Escape after completing add returns to Commandline and permits retry', async t => {
+  const { createLayout } = await import('../src/ui/layout.js');
+  const { handleInput } = await import('../src/ui/inputHandler.js');
+  const { setupKeyBindings } = await import('../src/ui/keyConfig.js');
+  const calendars = [{ id: 'source', summary: 'source' }];
+  const events = [];
+  const auth = {};
+  const createScreen = t.mock.method(blessed, 'screen', createTerminalScreen);
+  const layout = createLayout(calendars, events);
+  createScreen.mock.restore();
+  screen = layout.screen;
+  const { inputBox, keypressListener } = layout;
+  const calendarList = screen.children.find(child => child.options.label === 'Calendar List');
+  const editor = t.mock.method(screen, 'exec', (_command, _args, _options, done) => done(null, true));
+  const press = (name, ch) => screen.program.emit('keypress', ch, { name, full: name });
+  inputBox.on('submit', value => {
+    inputBox.clearValue();
+    inputBox.hide();
+    handleInput(auth, value, screen, calendars, events, events, keypressListener);
+  });
+  setupKeyBindings(screen, auth, calendars, events, events, inputBox);
+
+  press('a', 'a');
+  assert.equal(screen.focused.options.label, 'Calendar List');
+  press('escape');
+  assert.equal(screen.focused.options.label, 'Upcoming Events');
+  assert.equal(inputBox.hidden, true);
+
+  press('space', ' ');
+  await delay(20);
+  const completion = screen.children.find(child => child.options.label === 'Command Completion');
+  const addIndex = completion.items.findIndex(item => item.getText() === 'add');
+  assert.notEqual(addIndex, -1);
+  completion.select(addIndex);
+  completion.items[addIndex].emit('click');
+  assert.equal(inputBox.getValue(), 'add ');
+  await flushInput();
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    press('enter');
+    assert.equal(screen.focused.options.label, 'Calendar List');
+    press('escape');
+    assert.equal(calendarList.hidden, true);
+    assert.equal(screen.focused.options.label, 'Commandline');
+    assert.equal(inputBox.getValue(), 'add ');
+    assert.equal(calendarList.listeners('select').length, 0);
+    assert.equal(editor.mock.callCount(), 0);
+    await delay(20);
+  }
+
+  press('enter');
+  press('enter');
+  const form = screen.children.find(child => child.options.formType === 'event');
+  assert.equal(calendarList.hidden, true);
+  assert.equal(inputBox.hidden, true);
+  assert.equal(form.hidden, false);
+  assert.equal(editor.mock.callCount(), 1);
+  assert.equal(form.listeners('key C-s').length, 1);
+});
 
 test('same-calendar editing patches the existing event and preserves other fields', async t => {
   const f = await openEdit(t);
