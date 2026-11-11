@@ -3,7 +3,7 @@
  * エディタ内容の構築・パース、フォーム操作、バリデーション、Google API リソース構築
  */
 import { splitDateTimeIntoDateAndTime, convertToDateTime } from './dateUtils.js';
-import { openExternalEditor } from './editor.js';
+import { openExternalEditor, parseEditorFields } from './editor.js';
 
 const ENTER_HANDLER_KEY = Symbol('formBoxEnterHandler');
 const SAVE_HANDLER_KEY = Symbol('formBoxSaveHandler');
@@ -36,15 +36,7 @@ export function buildEditorContent(values, { includeAllDay = false } = {}) {
 }
 
 export function parseEditorContent(text, { includeAllDay = false } = {}) {
-  const details = {};
-
-  text.split('\n').forEach(line => {
-    const parts = line.split('|').map(part => part.trim());
-    if (parts.length === 2) {
-      const [label, value] = parts;
-      details[label] = value;
-    }
-  });
+  const details = parseEditorFields(text, 'Description');
 
   const parsed = {
     title: details['Event Title'] || '',
@@ -83,7 +75,7 @@ export function collectFormValues(formFields, { includeAllDay = false } = {}) {
     date: formFields.date.getValue().trim(),
     startTime: formFields.startTime.getValue().trim(),
     endTime: formFields.endTime.getValue().trim(),
-    description: formFields.description.getValue().trim(),
+    description: formFields.description.getValue(),
   };
 
   if (includeAllDay) {

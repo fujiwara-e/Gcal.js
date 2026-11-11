@@ -90,7 +90,7 @@ export async function addEventNL(auth, screen, calendars, events, allEvents) {
                     const date = formFields.date.getValue().trim();
                     const startTime = formFields.startTime.getValue().trim();
                     const endTime = formFields.endTime.getValue().trim();
-                    const description = formFields.description.getValue().trim();
+                    const description = formFields.description.getValue();
                     const allDay = formFields.all_day.checked;
 
                     if (!title || !date || !startTime || !endTime) {
