@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { getDefaultKeyBindings } from '../ui/keyConfig.js';
+import { getDefaultKeyBindings } from '../config/keyBindings.js';
 
 const settingPath = path.join(process.cwd(), 'setting.json');
 

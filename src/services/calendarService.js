@@ -111,6 +111,37 @@ export async function fetchEvents(auth, calendars) {
   return events.flat();
 }
 
+export async function fetchEventsForExport(auth, calendars, startDate, endDate) {
+  const client = createCalendarClient({ version: 'v3', auth });
+  const day = 24 * 60 * 60 * 1000;
+  // The API interprets all-day boundaries in each calendar's time zone.
+  // Widen the UTC date range, then filter by start date when formatting.
+  const timeMin = new Date(Date.parse(`${startDate}T00:00:00Z`) - day).toISOString();
+  const timeMax = new Date(Date.parse(`${endDate}T00:00:00Z`) + 2 * day).toISOString();
+  const eventsByCalendar = await Promise.all(calendars.map(async ({ id, summary }) => {
+    const events = [];
+    let pageToken;
+    do {
+      const { data } = await client.events.list({
+        calendarId: id,
+        singleEvents: true,
+        showDeleted: false,
+        timeMin,
+        timeMax,
+        pageToken,
+      });
+      for (const event of data.items ?? []) {
+        if (event.status !== 'cancelled' && event.start && event.end) {
+          events.push(Event.fromGAPIEvent(event, id, summary));
+        }
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    return events;
+  }));
+  return eventsByCalendar.flat();
+}
+
 export async function refreshCalendarList(auth, { subscribeNewCalendars = false } = {}) {
   const calendars = await fetchCalendars(auth);
   await insertCalendarListToDatabase(calendars, {
