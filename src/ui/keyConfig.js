@@ -4,6 +4,9 @@ import { addEventNL } from '../commands/addNL.js';
 import { editEvent } from '../commands/edit.js';
 import { toggleFullscreen } from './fullscreenManager.js';
 import { toggleLastYearView, toggleCurrentDescView } from './viewMode.js';
+import { getDefaultKeyBindings } from '../config/keyBindings.js';
+
+export { getDefaultKeyBindings };
 
 export function setupVimKeysForNavigation(widget, screen, focusleft, focusright) {
     screen.key(['j', 'k', 'h', 'l'], (ch, key) => {
@@ -95,24 +98,4 @@ export function setupKeyBindings(screen, auth, calendars, events, allEvents, inp
         }
         screen.render();
     });
-}
-
-export function getDefaultKeyBindings() {
-    return {
-        quit: ['q', 'C-c'],
-        addEvent: ['a'],
-        addEventNL: ['N'],
-        nextWeek: ['n'],
-        prevWeek: ['p'],
-        nextMonth: ['C-n'],
-        prevMonth: ['C-p'],
-        today: ['t'],
-        toggleCommandLine: ['space'],
-        fullscreenTable1: ['1'],
-        fullscreenTable2: ['2'],
-        fullscreenTable3: ['3'],
-        exitFullscreen: ['escape'],
-        toggleLastYear: ['y'],
-        toggleCurrentDesc: ['Y'],
-    };
 }

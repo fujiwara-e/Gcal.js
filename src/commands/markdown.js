@@ -1,16 +1,14 @@
 import blessed from 'blessed';
 import clipboardy from 'clipboardy';
-import { fetchCalendars, fetchEvents } from '../services/calendarService.js';
-import { convertToDateTime } from '../utils/dateUtils.js';
 import { fetchSelectedEventsFromDatabase } from '../services/calendarService.js';
 import { fetchEventsFromDatabase } from '../services/databaseService.js';
+import { formatMarkdownEvents } from '../utils/markdown.js';
 /**
   * Display events
   *
   * @param {Array<Event>} events The list of events.
   */
 export async function markdownCommand(auth, screen, calendars, args) {
-  const inputBox = screen.children.find(child => child.options.label === 'Commandline');
   const leftTable = screen.children.find(child => child.options.label === 'Upcoming Events');
   const logTable = screen.children.find(child => child.options.label === 'Gcal.js Log');
   const eventBox = blessed.box({
@@ -40,14 +38,7 @@ export async function markdownCommand(auth, screen, calendars, args) {
     events = await fetchSelectedEventsFromDatabase(calendars, args[0], args[1]);
   }
   events.sort((a, b) => a.start - b.start);
-  const eventText = events
-    .map(event => {
-      const startDate = event.start;
-      const month = startDate.getMonth() + 1;
-      const day = startDate.getDate();
-      return `+ (${month}/${day}) ${event.summary}`;
-    })
-    .join('\n');
+  const eventText = formatMarkdownEvents(events);
 
   eventBox.setContent(eventText);
 
